@@ -4972,4 +4972,690 @@ def customer_delete(id):
         c.close()
     return redirect(url_for("customers"))
 
+
+# ================================================================
+# GLOBTour FLEET MOBILE API + GORIVO + STANJE PUTNIKA
+# Dodano kao samostalan nastavak na postojeću bazu aplikacije.
+# ================================================================
+
+import secrets
+from werkzeug.utils import secure_filename
+
+DRIVER_TOKEN_TABLE = "driver_api_tokens"
+DRIVER_PASSENGER_TABLE = "passenger_reports"
+FUEL_TABLE = "fuel_reports"
+FUEL_UPLOAD_DIR = os.path.join(DATA_DIR, "fuel_uploads")
+os.makedirs(FUEL_UPLOAD_DIR, exist_ok=True)
+
+# Dodatne dozvole – postojeće dozvole ostaju nepromijenjene.
+PERMISSION_LABELS.update({
+    "fuel_view": "Gorivo – pregled",
+    "fuel_edit": "Gorivo – kontrola/uređivanje",
+    "fuel_delete": "Gorivo – brisanje",
+    "passengers_view": "Putnici – pregled/statistika",
+})
+
+
+def _api_json_error(message, status=400):
+    return jsonify({"ok": False, "error": message}), status
+
+
+def _api_driver_from_request():
+    auth = request.headers.get("Authorization", "")
+    if not auth.lower().startswith("bearer "):
+        return None, None
+    token = auth[7:].strip()
+    if not token:
+        return None, None
+    token_hash = hashlib.sha256(token.encode("utf-8")).hexdigest()
+    c = db()
+    try:
+        row = c.execute(
+            """SELECT u.id AS user_id, u.username, u.full_name, u.role, d.*
+               FROM driver_api_tokens t
+               JOIN users u ON u.id=t.user_id
+               JOIN drivers d ON d.user_id=u.id
+               WHERE t.token_hash=? AND t.active=1
+                 AND COALESCE(u.active,1)=1
+                 AND COALESCE(d.active,'Da')='Da'
+               LIMIT 1""",
+            (token_hash,)
+        ).fetchone()
+        if row:
+            c.execute(
+                "UPDATE driver_api_tokens SET last_used_at=? WHERE token_hash=?",
+                (datetime.now().isoformat(timespec="seconds"), token_hash)
+            )
+            c.commit()
+        return (row, token) if row else (None, None)
+    finally:
+        c.close()
+
+
+def ensure_driver_api_schema():
+    c = db()
+    try:
+        c.execute("""CREATE TABLE IF NOT EXISTS driver_api_tokens (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            token_hash TEXT UNIQUE NOT NULL,
+            created_at TEXT NOT NULL,
+            last_used_at TEXT DEFAULT '',
+            active INTEGER NOT NULL DEFAULT 1
+        )""")
+        c.execute("""CREATE TABLE IF NOT EXISTS driver_trip_confirmations (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            schedule_id INTEGER NOT NULL,
+            driver_id INTEGER NOT NULL,
+            status TEXT NOT NULL DEFAULT 'Čeka potvrdu',
+            rejection_reason TEXT DEFAULT '',
+            responded_at TEXT DEFAULT '',
+            UNIQUE(schedule_id, driver_id)
+        )""")
+        c.execute("""CREATE TABLE IF NOT EXISTS driver_fcm_tokens (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            token TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            active INTEGER NOT NULL DEFAULT 1
+        )""")
+        c.execute("CREATE INDEX IF NOT EXISTS idx_driver_fcm_user ON driver_fcm_tokens(user_id, active)")
+        c.execute("""CREATE TABLE IF NOT EXISTS passenger_reports (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            schedule_id INTEGER NOT NULL UNIQUE,
+            driver_id INTEGER,
+            driver_name TEXT NOT NULL DEFAULT '',
+            trip_date TEXT NOT NULL DEFAULT '',
+            line TEXT NOT NULL DEFAULT '',
+            time TEXT NOT NULL DEFAULT '',
+            vehicle TEXT NOT NULL DEFAULT '',
+            schedule_driver1 TEXT NOT NULL DEFAULT '',
+            schedule_driver2 TEXT NOT NULL DEFAULT '',
+            passenger_count INTEGER NOT NULL DEFAULT 0,
+            submitted_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )""")
+        c.execute("CREATE INDEX IF NOT EXISTS idx_passenger_reports_date ON passenger_reports(trip_date)")
+        c.execute("CREATE INDEX IF NOT EXISTS idx_passenger_reports_line ON passenger_reports(line)")
+        c.execute("CREATE INDEX IF NOT EXISTS idx_passenger_reports_vehicle ON passenger_reports(vehicle)")
+        c.execute("""CREATE TABLE IF NOT EXISTS fuel_reports (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            driver_id INTEGER,
+            driver_name TEXT NOT NULL DEFAULT '',
+            vehicle TEXT NOT NULL DEFAULT '',
+            fueling_type TEXT NOT NULL DEFAULT 'Točenje u garaži',
+            mileage REAL NOT NULL DEFAULT 0,
+            liters REAL NOT NULL DEFAULT 0,
+            report_date TEXT NOT NULL DEFAULT '',
+            report_time TEXT NOT NULL DEFAULT '',
+            submitted_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            mileage_photo TEXT NOT NULL DEFAULT '',
+            quantity_photo TEXT NOT NULL DEFAULT '',
+            work_order_photo TEXT NOT NULL DEFAULT '',
+            receipt_photo TEXT DEFAULT '',
+            status TEXT NOT NULL DEFAULT 'Na provjeri',
+            control_note TEXT DEFAULT '',
+            controlled_at TEXT DEFAULT '',
+            controlled_by TEXT DEFAULT '',
+            entry_source TEXT NOT NULL DEFAULT 'mobile'
+        )""")
+        cols = {r[1] for r in c.execute("PRAGMA table_info(fuel_reports)").fetchall()}
+        for col, typ in [
+            ("report_date", "TEXT NOT NULL DEFAULT ''"),
+            ("report_time", "TEXT NOT NULL DEFAULT ''"),
+            ("entry_source", "TEXT NOT NULL DEFAULT 'mobile'"),
+            ("control_note", "TEXT DEFAULT ''"),
+            ("controlled_at", "TEXT DEFAULT ''"),
+            ("controlled_by", "TEXT DEFAULT ''"),
+            ("driver_id", "INTEGER"),
+            ("driver_name", "TEXT NOT NULL DEFAULT ''"),
+        ]:
+            if col not in cols:
+                c.execute(f"ALTER TABLE fuel_reports ADD COLUMN {col} {typ}")
+        c.execute("CREATE INDEX IF NOT EXISTS idx_fuel_reports_date ON fuel_reports(report_date)")
+        c.execute("CREATE INDEX IF NOT EXISTS idx_fuel_reports_vehicle ON fuel_reports(vehicle)")
+        c.execute("CREATE INDEX IF NOT EXISTS idx_fuel_reports_status ON fuel_reports(status)")
+        c.commit()
+    finally:
+        c.close()
+
+
+try:
+    ensure_driver_api_schema()
+except Exception:
+    pass
+
+
+def _send_fcm_to_driver(conn, driver_name, title, body, schedule_id=None):
+    try:
+        import firebase_admin
+        from firebase_admin import credentials, messaging
+        if not firebase_admin._apps:
+            raw = os.environ.get("FIREBASE_SERVICE_ACCOUNT_JSON", "").strip()
+            cred_obj = None
+            if raw:
+                import json as _json
+                cred_obj = credentials.Certificate(_json.loads(raw))
+            else:
+                path = os.path.join(BASE, "firebase-service-account.json")
+                if os.path.exists(path):
+                    cred_obj = credentials.Certificate(path)
+            if cred_obj is None:
+                return False
+            firebase_admin.initialize_app(cred_obj)
+        names = {str(driver_name or "").strip()}
+        if not names or "" in names:
+            return False
+        for name in names:
+            u = conn.execute(
+                "SELECT id FROM users WHERE full_name=? OR username=? LIMIT 1", (name, name)
+            ).fetchone()
+            if not u:
+                continue
+            tokens = conn.execute(
+                "SELECT token FROM driver_fcm_tokens WHERE user_id=? AND active=1", (u[0],)
+            ).fetchall()
+            for t in tokens:
+                data = {"title": str(title), "body": str(body)}
+                if schedule_id is not None:
+                    data["schedule_id"] = str(schedule_id)
+                try:
+                    messaging.send(messaging.Message(
+                        token=t[0],
+                        notification=messaging.Notification(title=str(title), body=str(body)),
+                        data=data,
+                    ))
+                except Exception:
+                    continue
+            # Driver API historically stored only driver↔user mapping; keep going.
+        return True
+    except Exception:
+        return False
+
+
+def notify_driver_assignment(c, schedule_id, driver_name, changed=False):
+    name = str(driver_name or "").strip()
+    if not name:
+        return
+    title = "Raspored vožnje je izmijenjen" if changed else "Raspoređeni ste na vožnju"
+    body = (
+        "Raspored vaše vožnje je izmijenjen. Provjerite nove podatke u aplikaciji."
+        if changed else
+        "Dodijeljena vam je vožnja. Provjerite datum, vrijeme, liniju i vozilo u aplikaciji."
+    )
+    _send_fcm_to_driver(c, name, title, body, schedule_id)
+
+
+# ---------- MOBILE LOGIN / TOKEN ----------
+
+@app.post("/api/driver/login")
+def driver_api_login():
+    data = request.get_json(silent=True) or request.form
+    username = (data.get("username") or "").strip()
+    password = data.get("password") or ""
+    if not username or not password:
+        return _api_json_error("Korisničko ime i lozinka su obavezni.", 400)
+    c = db()
+    try:
+        user = c.execute(
+            "SELECT * FROM users WHERE username=? AND COALESCE(active,1)=1 LIMIT 1", (username,)
+        ).fetchone()
+        if not user or user["password_hash"] != hash_password(password):
+            return _api_json_error("Pogrešno korisničko ime ili lozinka.", 401)
+        if str(user["role"] or "").strip().lower() == "admin":
+            return _api_json_error("Mobilna prijava je dostupna samo povezanim vozačima.", 403)
+        driver = c.execute(
+            "SELECT * FROM drivers WHERE user_id=? AND COALESCE(active,'Da')='Da' LIMIT 1", (user["id"],)
+        ).fetchone()
+        if not driver:
+            return _api_json_error("Korisnički račun nije povezan s aktivnim vozačem.", 403)
+        raw_token = secrets.token_urlsafe(32)
+        token_hash = hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
+        now = datetime.now().isoformat(timespec="seconds")
+        c.execute("UPDATE driver_api_tokens SET active=0 WHERE user_id=?", (user["id"],))
+        c.execute(
+            "INSERT INTO driver_api_tokens(user_id,token_hash,created_at,last_used_at,active) VALUES(?,?,?,?,1)",
+            (user["id"], token_hash, now, now),
+        )
+        c.commit()
+        return jsonify({"ok": True, "token": raw_token, "driver": {"id": driver["id"], "name": driver["name"]}})
+    finally:
+        c.close()
+
+
+@app.post("/api/driver/logout")
+def driver_api_logout():
+    row, token = _api_driver_from_request()
+    if not row:
+        return _api_json_error("Neispravan ili istekao token.", 401)
+    c = db()
+    try:
+        c.execute("UPDATE driver_api_tokens SET active=0 WHERE token_hash=?", (hashlib.sha256(token.encode()).hexdigest(),))
+        c.commit()
+    finally:
+        c.close()
+    return jsonify({"ok": True})
+
+
+@app.post("/api/driver/fcm-token")
+def driver_api_fcm_token():
+    row, _ = _api_driver_from_request()
+    if not row:
+        return _api_json_error("Neovlašten pristup.", 401)
+    data = request.get_json(silent=True) or {}
+    fcm_token = str(data.get("fcm_token") or "").strip()
+    if not fcm_token:
+        return _api_json_error("FCM token je obavezan.", 400)
+    c = db()
+    try:
+        now = datetime.now().isoformat(timespec="seconds")
+        c.execute("UPDATE driver_fcm_tokens SET active=0 WHERE user_id=? AND token<>?", (row["user_id"], fcm_token))
+        existing = c.execute("SELECT id FROM driver_fcm_tokens WHERE user_id=? AND token=? LIMIT 1", (row["user_id"], fcm_token)).fetchone()
+        if existing:
+            c.execute("UPDATE driver_fcm_tokens SET updated_at=?, active=1 WHERE id=?", (now, existing[0]))
+        else:
+            c.execute("INSERT INTO driver_fcm_tokens(user_id,token,created_at,updated_at,active) VALUES(?,?,?,?,1)", (row["user_id"], fcm_token, now, now))
+        c.commit()
+    finally:
+        c.close()
+    return jsonify({"ok": True})
+
+
+# ---------- MOBILE TRIPS ----------
+
+def _driver_name_matches(row, driver_name):
+    n = str(driver_name or "").strip().lower()
+    return n and (str(row["driver1"] or "").strip().lower() == n or str(row["driver2"] or "").strip().lower() == n)
+
+
+@app.get("/api/driver/trips")
+def driver_api_trips():
+    row, _ = _api_driver_from_request()
+    if not row:
+        return _api_json_error("Neovlašten pristup.", 401)
+    driver_name = str(row["name"] or "").strip()
+    c = db()
+    try:
+        rows = c.execute(
+            "SELECT * FROM schedules WHERE COALESCE(hidden_from_schedule,0)=0 ORDER BY date,time,id"
+        ).fetchall()
+        out = []
+        for r in rows:
+            if not _driver_name_matches(r, driver_name):
+                continue
+            confirm = c.execute(
+                "SELECT status,rejection_reason FROM driver_trip_confirmations WHERE schedule_id=? AND driver_id=? LIMIT 1",
+                (r["id"], row["id"]),
+            ).fetchone()
+            status = str(confirm["status"] if confirm else "Čeka potvrdu")
+            out.append({
+                "id": r["id"], "date": r["date"] or "", "time": r["time"] or "",
+                "line": r["line"] or "", "vehicle": r["vehicle"] or "",
+                "status": status, "rejectionReason": (confirm["rejection_reason"] if confirm else "") or "",
+                "tripType": "schedule", "driver1": r["driver1"] or "", "driver2": r["driver2"] or ""
+            })
+        return jsonify({"ok": True, "trips": out})
+    finally:
+        c.close()
+
+
+@app.post("/api/driver/trips/<int:schedule_id>/confirm")
+def driver_api_trip_confirm(schedule_id):
+    row, _ = _api_driver_from_request()
+    if not row:
+        return _api_json_error("Neovlašten pristup.", 401)
+    c = db()
+    try:
+        trip = c.execute("SELECT * FROM schedules WHERE id=?", (schedule_id,)).fetchone()
+        if not trip or not _driver_name_matches(trip, row["name"]):
+            return _api_json_error("Vožnja nije dodijeljena ovom vozaču.", 403)
+        c.execute("INSERT INTO driver_trip_confirmations(schedule_id,driver_id,status,rejection_reason,responded_at) VALUES(?,?,?,'',?) ON CONFLICT(schedule_id,driver_id) DO UPDATE SET status=excluded.status,rejection_reason='',responded_at=excluded.responded_at", (schedule_id,row["id"],"Potvrđeno",datetime.now().isoformat(timespec="seconds")))
+        c.commit()
+        return jsonify({"ok": True})
+    finally:
+        c.close()
+
+
+@app.post("/api/driver/trips/<int:schedule_id>/reject")
+def driver_api_trip_reject(schedule_id):
+    row, _ = _api_driver_from_request()
+    if not row:
+        return _api_json_error("Neovlašten pristup.", 401)
+    data = request.get_json(silent=True) or {}
+    reason = str(data.get("reason") or "").strip()
+    if not reason:
+        return _api_json_error("Razlog odbijanja je obavezan.", 400)
+    c = db()
+    try:
+        trip = c.execute("SELECT * FROM schedules WHERE id=?", (schedule_id,)).fetchone()
+        if not trip or not _driver_name_matches(trip, row["name"]):
+            return _api_json_error("Vožnja nije dodijeljena ovom vozaču.", 403)
+        c.execute("INSERT INTO driver_trip_confirmations(schedule_id,driver_id,status,rejection_reason,responded_at) VALUES(?,?,?,?,?) ON CONFLICT(schedule_id,driver_id) DO UPDATE SET status=excluded.status,rejection_reason=excluded.rejection_reason,responded_at=excluded.responded_at", (schedule_id,row["id"],"Odbijeno",reason,datetime.now().isoformat(timespec="seconds")))
+        c.commit()
+        return jsonify({"ok": True})
+    finally:
+        c.close()
+
+
+# ---------- MOBILE VEHICLES / BREAKDOWNS ----------
+
+@app.get("/api/driver/vehicles")
+def driver_api_vehicles():
+    row, _ = _api_driver_from_request()
+    if not row:
+        return _api_json_error("Neovlašten pristup.", 401)
+    c = db()
+    try:
+        rows = c.execute("SELECT registration,seats FROM vehicles WHERE COALESCE(active,'Da')='Da' ORDER BY registration").fetchall()
+        return jsonify({"ok": True, "vehicles": [dict(x) for x in rows]})
+    finally:
+        c.close()
+
+
+@app.post("/api/driver/breakdowns")
+def driver_api_breakdowns():
+    row, _ = _api_driver_from_request()
+    if not row:
+        return _api_json_error("Neovlašten pristup.", 401)
+    data = request.get_json(silent=True) or {}
+    vehicle = str(data.get("vehicle") or "").strip()
+    category = str(data.get("category") or "Ostalo").strip()
+    description = str(data.get("description") or "").strip()
+    if not vehicle or not description:
+        return _api_json_error("Vozilo i opis kvara su obavezni.", 400)
+    c = db()
+    try:
+        c.execute("INSERT INTO breakdowns(company,vehicle,breakdown_date,line,location,driver1,driver2,description,category,severity,status,created_by,created_at,repair_cost) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,0)", ("",vehicle,date.today().isoformat(),"","",row["name"],"",description,category,"Srednji","Prijavljen",row["name"],datetime.now().isoformat(timespec="seconds")))
+        c.commit()
+        return jsonify({"ok": True})
+    finally:
+        c.close()
+
+
+# ---------- PASSENGERS ----------
+
+@app.post("/api/driver/passengers")
+def driver_api_passengers():
+    row, _ = _api_driver_from_request()
+    if not row:
+        return _api_json_error("Neovlašten pristup.", 401)
+    data = request.get_json(silent=True) or {}
+    try:
+        schedule_id = int(data.get("schedule_id"))
+        passenger_count = int(data.get("passenger_count"))
+    except (TypeError, ValueError):
+        return _api_json_error("schedule_id i passenger_count moraju biti ispravni brojevi.", 400)
+    if passenger_count < 0:
+        return _api_json_error("Broj putnika ne može biti negativan.", 400)
+    c = db()
+    try:
+        trip = c.execute("SELECT * FROM schedules WHERE id=? AND COALESCE(hidden_from_schedule,0)=0", (schedule_id,)).fetchone()
+        if not trip or not _driver_name_matches(trip, row["name"]):
+            return _api_json_error("Odabrana vožnja nije dodijeljena ovom vozaču.", 403)
+        now = datetime.now().isoformat(timespec="seconds")
+        c.execute("""INSERT INTO passenger_reports(schedule_id,driver_id,driver_name,trip_date,line,time,vehicle,schedule_driver1,schedule_driver2,passenger_count,submitted_at)
+                     VALUES(?,?,?,?,?,?,?,?,?,?,?)
+                     ON CONFLICT(schedule_id) DO UPDATE SET driver_id=excluded.driver_id,driver_name=excluded.driver_name,trip_date=excluded.trip_date,line=excluded.line,time=excluded.time,vehicle=excluded.vehicle,schedule_driver1=excluded.schedule_driver1,schedule_driver2=excluded.schedule_driver2,passenger_count=excluded.passenger_count,submitted_at=excluded.submitted_at""", (schedule_id,row["id"],row["name"],trip["date"] or "",trip["line"] or "",trip["time"] or "",trip["vehicle"] or "",trip["driver1"] or "",trip["driver2"] or "",passenger_count,now))
+        c.commit()
+        return jsonify({"ok": True, "saved": True})
+    finally:
+        c.close()
+
+
+@app.get("/api/driver/passengers")
+def driver_api_passenger_reports():
+    row, _ = _api_driver_from_request()
+    if not row:
+        return _api_json_error("Neovlašten pristup.", 401)
+    c = db()
+    try:
+        reports = c.execute("SELECT * FROM passenger_reports ORDER BY trip_date DESC,time DESC,id DESC").fetchall()
+        return jsonify({"ok": True, "reports": [dict(x) for x in reports]})
+    finally:
+        c.close()
+
+
+@app.route("/statistika/putnici")
+def passenger_statistics():
+    u = auth_user()
+    if not u or not has_permission(u, "passengers_view"):
+        return render_template("403.html"), 403
+    date_from = request.args.get("date_from", "").strip()
+    date_to = request.args.get("date_to", "").strip()
+    c = db()
+    try:
+        where=[]; params=[]
+        if date_from:
+            where.append("trip_date>=?"); params.append(date_from)
+        if date_to:
+            where.append("trip_date<=?"); params.append(date_to)
+        clause = (" WHERE " + " AND ".join(where)) if where else ""
+        rows = c.execute("SELECT * FROM passenger_reports"+clause+" ORDER BY trip_date DESC,time DESC,id DESC", tuple(params)).fetchall()
+        totals = c.execute("SELECT COUNT(*) AS rides, COALESCE(SUM(passenger_count),0) AS passengers, COALESCE(AVG(passenger_count),0) AS average FROM passenger_reports"+clause, tuple(params)).fetchone()
+        by_line = c.execute("SELECT line,COUNT(*) AS rides,COALESCE(SUM(passenger_count),0) AS passengers,COALESCE(AVG(passenger_count),0) AS average FROM passenger_reports"+clause+" GROUP BY line ORDER BY passengers DESC,line", tuple(params)).fetchall()
+        by_vehicle = c.execute("SELECT vehicle,COUNT(*) AS rides,COALESCE(SUM(passenger_count),0) AS passengers,COALESCE(AVG(passenger_count),0) AS average FROM passenger_reports"+clause+" GROUP BY vehicle ORDER BY passengers DESC,vehicle", tuple(params)).fetchall()
+        return render_template("passenger_statistics.html", rows=rows, totals=totals, by_line=by_line, by_vehicle=by_vehicle, date_from=date_from, date_to=date_to)
+    finally:
+        c.close()
+
+
+# ---------- FUEL HELPERS ----------
+
+def _fuel_current_user_name():
+    try:
+        u = auth_user()
+        if u:
+            return str(u["full_name"] or u["username"] or "").strip()
+    except Exception:
+        pass
+    return str(session.get("user_full_name") or session.get("username") or "").strip()
+
+
+def _fuel_save_upload(file_storage, prefix="fuel"):
+    if not file_storage or not getattr(file_storage, "filename", ""):
+        return ""
+    original = secure_filename(file_storage.filename)
+    if not original:
+        return ""
+    ext = original.rsplit(".", 1)[1].lower() if "." in original else "jpg"
+    if ext not in {"jpg","jpeg","png","webp","pdf"}:
+        return ""
+    name = f"{prefix}_{uuid.uuid4().hex}.{ext}"
+    path = os.path.join(FUEL_UPLOAD_DIR, name)
+    file_storage.save(path)
+    return name
+
+
+def _fuel_row_data(r):
+    d = dict(r)
+    d.setdefault("entry_source", "mobile")
+    d["entry_source_label"] = "🖊 Ručno dodano" if str(d.get("entry_source") or "mobile") == "manual" else "📱 Mobilna aplikacija"
+    return d
+
+
+def _fuel_status_value(value):
+    v = str(value or "Na provjeri").strip()
+    return v if v in {"Na provjeri","Potvrđeno","Odbijeno"} else "Na provjeri"
+
+
+# ---------- FUEL MOBILE API ----------
+
+@app.post("/api/driver/fuel")
+def driver_api_fuel():
+    row, _ = _api_driver_from_request()
+    if not row:
+        return _api_json_error("Neovlašten pristup.", 401)
+    vehicle = str(request.form.get("vehicle") or "").strip()
+    fueling_type = str(request.form.get("fueling_type") or "Točenje u garaži").strip()
+    mileage_raw = str(request.form.get("mileage") or "0").replace(",", ".")
+    liters_raw = str(request.form.get("liters") or "0").replace(",", ".")
+    try:
+        mileage = float(mileage_raw); liters = float(liters_raw)
+    except ValueError:
+        return _api_json_error("Kilometraža i litraža moraju biti brojevi.", 400)
+    if not vehicle or mileage < 0 or liters <= 0:
+        return _api_json_error("Vozilo, kilometraža i litraža su obavezni.", 400)
+    mileage_photo = _fuel_save_upload(request.files.get("mileage_photo"), "mileage")
+    quantity_photo = _fuel_save_upload(request.files.get("quantity_photo"), "quantity")
+    work_order_photo = _fuel_save_upload(request.files.get("work_order_photo"), "workorder")
+    receipt_photo = _fuel_save_upload(request.files.get("receipt_photo"), "receipt")
+    if not mileage_photo or not quantity_photo or not work_order_photo:
+        return _api_json_error("Obavezne su fotografije kilometraže, količine goriva i putnog radnog naloga.", 400)
+    if fueling_type == "Vanjsko točenje" and not receipt_photo:
+        return _api_json_error("Za vanjsko točenje račun je obavezan.", 400)
+    now = datetime.now()
+    c = db()
+    try:
+        c.execute("""INSERT INTO fuel_reports(driver_id,driver_name,vehicle,fueling_type,mileage,liters,report_date,report_time,submitted_at,mileage_photo,quantity_photo,work_order_photo,receipt_photo,status,entry_source)
+                     VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""", (row["id"],row["name"],vehicle,fueling_type,mileage,liters,now.date().isoformat(),now.strftime("%H:%M:%S"),now.isoformat(timespec="seconds"),mileage_photo,quantity_photo,work_order_photo,receipt_photo,"Na provjeri","mobile"))
+        c.commit()
+        return jsonify({"ok": True})
+    finally:
+        c.close()
+
+
+@app.get("/api/driver/fuel")
+def driver_api_fuel_list():
+    row, _ = _api_driver_from_request()
+    if not row:
+        return _api_json_error("Neovlašten pristup.", 401)
+    c = db()
+    try:
+        reports = c.execute("SELECT * FROM fuel_reports WHERE driver_id=? ORDER BY report_date DESC,report_time DESC,id DESC", (row["id"],)).fetchall()
+        return jsonify({"ok": True, "reports": [dict(x) for x in reports]})
+    finally:
+        c.close()
+
+
+# ---------- FUEL WEB ----------
+
+@app.route("/gorivo", methods=["GET","POST"])
+def fuel_page():
+    u = auth_user()
+    if not u or not has_permission(u, "fuel_view"):
+        return render_template("403.html"), 403
+    c = db()
+    try:
+        if request.method == "POST":
+            if not has_permission(u, "fuel_edit"):
+                return render_template("403.html"), 403
+            driver_name = request.form.get("driver_name", "").strip()
+            vehicle = request.form.get("vehicle", "").strip()
+            fueling_type = request.form.get("fueling_type", "Točenje u garaži").strip() or "Točenje u garaži"
+            report_date = request.form.get("report_date", "").strip() or date.today().isoformat()
+            report_time = request.form.get("report_time", "").strip()
+            try:
+                mileage = float((request.form.get("mileage") or "0").replace(",", "."))
+                liters = float((request.form.get("liters") or "0").replace(",", "."))
+            except ValueError:
+                flash("Kilometraža i litraža moraju biti brojevi.", "danger")
+                return redirect(url_for("fuel_page"))
+            if not vehicle or liters <= 0 or mileage < 0:
+                flash("Vozilo, litraža i kilometraža moraju biti ispravni.", "danger")
+                return redirect(url_for("fuel_page"))
+            mileage_photo = _fuel_save_upload(request.files.get("mileage_photo"), "manual_mileage")
+            quantity_photo = _fuel_save_upload(request.files.get("quantity_photo"), "manual_quantity")
+            work_order_photo = _fuel_save_upload(request.files.get("work_order_photo"), "manual_workorder")
+            receipt_photo = _fuel_save_upload(request.files.get("receipt_photo"), "manual_receipt")
+            c.execute("""INSERT INTO fuel_reports(driver_id,driver_name,vehicle,fueling_type,mileage,liters,report_date,report_time,submitted_at,mileage_photo,quantity_photo,work_order_photo,receipt_photo,status,entry_source)
+                         VALUES(NULL,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""", (driver_name,vehicle,fueling_type,mileage,liters,report_date,report_time,datetime.now().isoformat(timespec="seconds"),mileage_photo,quantity_photo,work_order_photo,receipt_photo,"Na provjeri","manual"))
+            c.commit()
+            flash("Ručni unos točenja je spremljen na provjeru.", "success")
+            return redirect(url_for("fuel_page"))
+
+        vehicle = request.args.get("vehicle", "").strip()
+        df = request.args.get("date_from", "").strip()
+        dt = request.args.get("date_to", "").strip()
+        where=[]; params=[]
+        if vehicle:
+            where.append("vehicle=?"); params.append(vehicle)
+        if df:
+            where.append("report_date>=?"); params.append(df)
+        if dt:
+            where.append("report_date<=?"); params.append(dt)
+        clause = " WHERE " + " AND ".join(where) if where else ""
+        rows = c.execute("SELECT * FROM fuel_reports"+clause+" ORDER BY report_date DESC,report_time DESC,id DESC", tuple(params)).fetchall()
+        rows = [_fuel_row_data(r) for r in rows]
+        vehicle_options = [r[0] for r in c.execute("SELECT DISTINCT registration FROM vehicles WHERE COALESCE(active,'Da')='Da' ORDER BY registration").fetchall()]
+        driver_options = [r[0] for r in c.execute("SELECT name FROM drivers WHERE COALESCE(active,'Da')='Da' ORDER BY name").fetchall()]
+        return render_template("fuel_reports.html", rows=rows, vehicle=vehicle, df=df, dt=dt, current_controller=_fuel_current_user_name(), can_edit=has_permission(u,"fuel_edit"), is_admin=str(u["role"] or "").lower()=="admin", vehicle_options=vehicle_options, driver_options=driver_options)
+    finally:
+        c.close()
+
+
+@app.get("/gorivo/slika/<path:filename>")
+def fuel_image(filename):
+    u = auth_user()
+    if not u or not has_permission(u, "fuel_view"):
+        return render_template("403.html"), 403
+    return send_from_directory(FUEL_UPLOAD_DIR, filename)
+
+
+@app.route("/gorivo/<int:report_id>/uredi", methods=["POST"])
+def fuel_edit(report_id):
+    u = auth_user()
+    if not u or not has_permission(u, "fuel_edit"):
+        return render_template("403.html"), 403
+    c = db()
+    try:
+        row = c.execute("SELECT * FROM fuel_reports WHERE id=?", (report_id,)).fetchone()
+        if not row:
+            flash("Unos goriva nije pronađen.", "danger"); return redirect(url_for("fuel_page"))
+        vehicle = request.form.get("vehicle", row["vehicle"] or "").strip()
+        liters = float((request.form.get("liters", row["liters"] or 0) or 0).replace(",", "."))
+        mileage = float((request.form.get("mileage", row["mileage"] or 0) or 0).replace(",", "."))
+        if not vehicle or liters <= 0 or mileage < 0:
+            flash("Podaci nisu ispravni.", "danger"); return redirect(url_for("fuel_page"))
+        c.execute("UPDATE fuel_reports SET vehicle=?,liters=?,mileage=?,status='Na provjeri',controlled_at='',controlled_by='' WHERE id=?", (vehicle,liters,mileage,report_id))
+        c.commit(); flash("Unos goriva je izmijenjen i vraćen na provjeru.", "success")
+    except ValueError:
+        flash("Litraža i kilometraža moraju biti brojevi.", "danger")
+    finally:
+        c.close()
+    return redirect(url_for("fuel_page"))
+
+
+@app.post("/gorivo/<int:report_id>/obrisi")
+def fuel_delete(report_id):
+    u = auth_user()
+    if not u or str(u["role"] or "").lower() != "admin" or not has_permission(u, "fuel_delete"):
+        return render_template("403.html"), 403
+    c = db()
+    try:
+        row = c.execute("SELECT * FROM fuel_reports WHERE id=?", (report_id,)).fetchone()
+        if not row:
+            flash("Unos goriva nije pronađen.", "danger"); return redirect(url_for("fuel_page"))
+        for col in ("mileage_photo","quantity_photo","work_order_photo","receipt_photo"):
+            fn = str(row[col] or "").strip()
+            if fn:
+                try: os.remove(os.path.join(FUEL_UPLOAD_DIR, fn))
+                except Exception: pass
+        c.execute("DELETE FROM fuel_reports WHERE id=?", (report_id,)); c.commit()
+        flash("Unos goriva i fotografije su obrisani.", "success")
+    finally:
+        c.close()
+    return redirect(url_for("fuel_page"))
+
+
+@app.post("/gorivo/<int:report_id>/kontrola")
+def fuel_control(report_id):
+    u = auth_user()
+    if not u or not has_permission(u, "fuel_edit"):
+        return render_template("403.html"), 403
+    status = _fuel_status_value(request.form.get("status"))
+    note = request.form.get("control_note", "").strip()
+    controller = _fuel_current_user_name()
+    c = db()
+    try:
+        exists = c.execute("SELECT id FROM fuel_reports WHERE id=?", (report_id,)).fetchone()
+        if not exists:
+            flash("Unos goriva nije pronađen.", "danger")
+        else:
+            c.execute("UPDATE fuel_reports SET status=?,control_note=?,controlled_at=?,controlled_by=? WHERE id=?", (status,note,datetime.now().isoformat(timespec="seconds"),controller,report_id))
+            c.commit(); flash("Kontrola goriva je spremljena.", "success")
+    finally:
+        c.close()
+    return redirect(url_for("fuel_page"))
+
+
 if __name__=="__main__":app.run(host="127.0.0.1",port=5000,debug=False)
