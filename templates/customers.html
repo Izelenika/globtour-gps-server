@@ -1,6 +1,0 @@
-{% extends "base.html" %}{% block content %}<div class="title"><h1>👥 Klijenti</h1><a class="btn" href="/klijenti/novi">＋ Novi klijent</a></div><div class="panel"><form><input name="q" value="{{q}}" placeholder="Pretraži"><button class="btn">🔎 Pretraži</button></form></div><div class="panel"><table class="table"><tr><th>Klijent</th><th>ID</th><th>PDV</th><th>Adresa</th><th>Kontakt</th><th></th></tr>{% for r in rows %}<tr><td><b>{{r.name}}</b></td><td>{{r.id_number or ''}}</td><td>{{r.vat_number or ''}}</td><td>{{r.address or ''}} {{r.city or ''}}</td><td>{{r.contact_person or ''}} {{r.phone or ''}}</td><td style="white-space:nowrap">
-<a class="btn secondary" href="/klijenti/{{r.id}}/uredi">Uredi</a>
-<form method="post" action="/klijenti/{{r.id}}/obrisi" style="display:inline" onsubmit="return confirm('Želite li obrisati klijenta: {{r.name}}?');">
-<button type="submit" class="btn danger">🗑 Obriši</button>
-</form>
-</td></tr>{% endfor %}</table></div>{% endblock %}

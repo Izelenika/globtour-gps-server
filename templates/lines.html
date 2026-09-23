@@ -1,6 +1,0 @@
-{% extends "base.html" %}{% block content %}
-<div class="title"><div><h1>Linije</h1><div class="muted">Vrijeme, grupa i dani prometovanja definiraju se ovdje.</div></div>{% if has_permission(current_user,"lines_edit") %}<a class="btn" href="/linije/dodaj">+ Dodaj liniju</a>{% endif %}</div>
-<div class="panel"><form class="filters"><div class="field"><label>Pretraži liniju</label><input name="q" value="{{q}}"></div><button class="btn">Traži</button></form></div>
-<div class="panel"><table><tr><th>Linija</th><th>Polazište</th><th>Odredište</th><th>Kilometraža</th><th>Vrijeme</th><th>Grupa</th><th>Dani prometovanja</th><th>Status</th><th>Dozvole</th><th></th></tr>
-{% for r in rows %}<tr><td><b>{{r.name.strip()}}</b></td><td>{{r.origin}}</td><td>{{r.destination}}</td><td>{{ r.distance_km|default('') }} km</td><td>{{r.departure}}</td><td>{{r.group_type}}</td><td>{{r.schedule_day}}</td><td>{{r.active}}</td><td>{% for p in r.permits %}<div><b>{{p.permit}}</b>{% if p.valid_until %} – {{p.valid_until}}{% endif %}</div>{% endfor %}</td><td>{% if has_permission(current_user,"lines_edit") %}<a class="btn edit-btn" href="/linije/{{r.id}}/uredi">Uredi</a>{% else %}<a class="btn secondary" href="/linije/{{r.id}}/uredi">Pregled</a>{% endif %}</td></tr>{% endfor %}
-</table></div>{% endblock %}

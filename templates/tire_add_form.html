@@ -1,5 +1,0 @@
-{% extends "base.html" %}{% block content %}<div class="title"><h1>Dodaj gumu</h1><a class="btn secondary" href="/gume">Natrag</a></div><div class="panel"><form method="post"><div class="grid">
-<div class="field"><label>Serijski broj</label><input name="serial_number"></div><div class="field"><label>Dimenzija *</label><input required name="dimension"></div>
-<div class="field"><label>Marka</label><input name="brand"></div><div class="field"><label>Tip</label><select name="tire_type"><option></option>{% for x in types %}<option>{{x}}</option>{% endfor %}</select></div>
-<div class="field"><label>Skladište</label><select name="warehouse">{% for x in warehouses %}<option>{{x}}</option>{% endfor %}</select></div></div>
-<div class="field"><label>Napomena</label><textarea name="note"></textarea></div><button class="btn">Spremi</button></form></div>{% endblock %}

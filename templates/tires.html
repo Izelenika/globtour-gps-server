@@ -1,6 +1,0 @@
-{% extends "base.html" %}{% block content %}
-<div class="title"><div><h1>Gume</h1><div class="muted">Evidencija pojedinačnih guma – podaci uvezeni iz Excel tablice</div></div><div><a class="btn" href="/gume/montaza">Montaža</a> <a class="btn secondary" href="/gume/demontaza">Demontaža</a></div></div>
-<form class="searchbar" method="get"><input name="q" value="{{q}}" placeholder="Pretraži serijski broj, dimenziju, marku ili vozilo..."><button class="btn">Pretraži</button></form>
-<div class="panel"><table><thead><tr><th>Serijski br.</th><th>Dimenzija</th><th>Marka</th><th>Tip</th><th>Status</th><th>Skladište</th><th>Vozilo</th><th>Pozicija</th><th>KM montaže</th><th>Prijeđeno km</th><th>Akcija</th></tr></thead><tbody>
-{% for r in rows %}<tr><td>{{r.serial_number or ''}}</td><td><b>{{r.dimension}}</b></td><td>{{r.brand or ''}}</td><td>{{r.tire_type or ''}}</td><td>{{r.status}}</td><td>{{r.warehouse or ''}}</td><td>{% if r.vehicle %}<a href="/gume/vozilo/{{r.vehicle|urlencode}}">{{r.vehicle}}</a>{% endif %}</td><td>{{r.position or ''}}</td><td>{{r.mounted_km or ''}}</td><td>{% if r.mounted_km and r.demounted_km %}{{r.demounted_km-r.mounted_km}}{% endif %}</td><td><a class="btn secondary" href="/gume/uredi/{{r.id}}">Uredi</a></td></tr>{% else %}<tr><td colspan="11">Nema evidentiranih guma.</td></tr>{% endfor %}
-</tbody></table></div>{% endblock %}
