@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="hr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Globtour GPS</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+body{margin:0;font-family:Arial,sans-serif;background:#f4f6f8;color:#17202a}
+header{background:#ffd400;padding:14px 22px;font-size:22px;font-weight:700}
+.layout{display:grid;grid-template-columns:360px 1fr;height:calc(100vh - 56px)}
+aside{background:white;padding:16px;overflow:auto;border-right:1px solid #ddd}
+#map{height:100%}
+.card{border:1px solid #ddd;border-radius:12px;padding:12px;margin-bottom:10px;background:white;cursor:pointer}
+.card:hover{background:#fafafa}
+.title{font-weight:700;margin-bottom:5px}
+.meta{font-size:13px;line-height:1.5;color:#52606d}
+.badge{display:inline-block;padding:3px 7px;border-radius:8px;font-size:11px;background:#e9f7ef;color:#18794e}
+.off{background:#fdecec;color:#a61b1b}
+.small{font-size:12px;color:#68737d;margin-bottom:12px}
+</style>
+</head>
+<body>
+<header>GLOBTOUR GPS</header>
+<div class="layout">
+<aside>
+  <div class="small">Vlastiti GPS server • FMC150 / Teltonika AVL</div>
+  <div id="devices">Čekam podatke s FMC150...</div>
+</aside>
+<div id="map"></div>
+</div>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+const map=L.map('map').setView([43.35,17.81],7);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'}).addTo(map);
+const markers={};
+const tracks={};
+
+function fmtTime(v){
+  if(!v) return 'nema podataka';
+  return new Date(v).toLocaleString('hr-HR',{hour12:false});
+}
+function esc(v){return String(v??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));}
+
+async function load(){
+  const r=await fetch('/api/devices');
+  const data=await r.json();
+  const box=document.getElementById('devices');
+  if(!data.length){box.innerHTML='<div class="small">Nema primljenih GPS zapisa.</div>';return;}
+  box.innerHTML='';
+  data.forEach(d=>{
+    const id=d.imei;
+    const label=d.registration || d.name || id;
+    const online=d.last_seen && (Date.now()-new Date(d.last_seen).getTime()<5*60*1000);
+    const div=document.createElement('div');
+    div.className='card';
+    div.innerHTML=`<div class="title">🚌 ${esc(label)}</div>
+      <div class="meta">IMEI: ${esc(id)}</div>
+      <div class="meta">Brzina: ${d.speed_kmh??'-'} km/h • Smjer: ${d.angle??'-'}°</div>
+      <div class="meta">GPS: ${d.latitude??'-'}, ${d.longitude??'-'}</div>
+      <div class="meta">Satellites: ${d.satellites??'-'} • Ignition: ${d.ignition??'-'}</div>
+      <div class="meta">Zadnji zapis: ${fmtTime(d.ts_utc)}</div>
+      <span class="badge ${online?'':'off'}">${online?'ONLINE':'OFFLINE'}</span>`;
+    div.onclick=()=>{if(d.latitude&&d.longitude)map.setView([d.latitude,d.longitude],15);};
+    box.appendChild(div);
+
+    if(d.latitude!==null && d.longitude!==null && d.latitude!==undefined && d.longitude!==undefined){
+      if(!markers[id]){
+        markers[id]=L.marker([d.latitude,d.longitude]).addTo(map);
+      }else markers[id].setLatLng([d.latitude,d.longitude]);
+      markers[id].bindPopup(`<b>${esc(label)}</b><br>Brzina: ${d.speed_kmh??'-'} km/h<br>Vrijeme: ${fmtTime(d.ts_utc)}`);
+    }
+  });
+}
+load();
+setInterval(load,5000);
+</script>
+</body>
+</html>
