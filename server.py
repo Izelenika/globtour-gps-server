@@ -430,4 +430,4 @@ async def update_device(imei: str, request: Request):
 
 
 if __name__ == "__main__":
-    uvicorn.run("server:app", host=WEB_HOST, port=WEB_PORT, reload=False)
+    uvicorn.run(app, host=WEB_HOST, port=WEB_PORT, reload=False)
