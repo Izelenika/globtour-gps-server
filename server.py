@@ -21,74 +21,25 @@ WEB_HOST = "0.0.0.0"
 WEB_PORT = int(os.getenv("PORT", "8000"))
 
 gps_listener = None
-gps_listener_task = None
-
-
-async def tcp_listener_loop():
-    """Keep the Teltonika TCP listener alive across Railway restarts/overlap."""
-    global gps_listener
-    while True:
-        try:
-            server = await asyncio.start_server(
-                handle_tracker,
-                TCP_HOST,
-                TCP_PORT,
-                reuse_address=True,
-            )
-            gps_listener = server
-            sockets = ", ".join(str(s.getsockname()) for s in server.sockets or [])
-            print(f"[GPS] TCP listener running on {sockets}")
-
-            # Keep this listener alive until the lifespan task is cancelled.
-            await server.serve_forever()
-
-        except asyncio.CancelledError:
-            raise
-
-        except OSError as e:
-            # Railway can briefly have the previous deployment/process alive.
-            # Do not crash the HTTP server; retry after the old listener exits.
-            if e.errno in (98, 48, 10048):
-                print(
-                    f"[GPS] TCP port {TCP_PORT} is temporarily busy; "
-                    "retrying in 5 seconds..."
-                )
-                await asyncio.sleep(5)
-            else:
-                print(f"[GPS] TCP listener error: {e}; retrying in 5 seconds...")
-                await asyncio.sleep(5)
-
-        except Exception as e:
-            print(f"[GPS] TCP listener error: {e}; retrying in 5 seconds...")
-            await asyncio.sleep(5)
-
-        finally:
-            if gps_listener is not None:
-                try:
-                    gps_listener.close()
-                    await gps_listener.wait_closed()
-                except Exception:
-                    pass
-                gps_listener = None
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global gps_listener_task
+    global gps_listener
     init_db()
-    gps_listener_task = asyncio.create_task(tcp_listener_loop())
-
+    gps_listener = await asyncio.start_server(
+        handle_tracker, TCP_HOST, TCP_PORT, reuse_port=True
+    )
+    sockets = ", ".join(str(s.getsockname()) for s in gps_listener.sockets or [])
+    print(f"[GPS] TCP listener running on {sockets}")
     try:
         yield
     finally:
-        if gps_listener_task is not None:
-            gps_listener_task.cancel()
-            try:
-                await gps_listener_task
-            except asyncio.CancelledError:
-                pass
-            gps_listener_task = None
-        print("[GPS] TCP listener stopped")
+        if gps_listener is not None:
+            gps_listener.close()
+            await gps_listener.wait_closed()
+            gps_listener = None
+            print("[GPS] TCP listener stopped")
 
 
 app = FastAPI(title="Globtour GPS Server", lifespan=lifespan)
