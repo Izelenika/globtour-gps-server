@@ -6,6 +6,7 @@ import time
 import os
 from datetime import datetime, timezone
 from pathlib import Path
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse
@@ -19,7 +20,27 @@ TCP_PORT = 9000
 WEB_HOST = "0.0.0.0"
 WEB_PORT = int(os.getenv("PORT", "8000"))
 
-app = FastAPI(title="Globtour GPS Server")
+gps_listener = None
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    global gps_listener
+    init_db()
+    gps_listener = await asyncio.start_server(handle_tracker, TCP_HOST, TCP_PORT)
+    sockets = ", ".join(str(s.getsockname()) for s in gps_listener.sockets or [])
+    print(f"[GPS] TCP listener running on {sockets}")
+    try:
+        yield
+    finally:
+        if gps_listener is not None:
+            gps_listener.close()
+            await gps_listener.wait_closed()
+            gps_listener = None
+            print("[GPS] TCP listener stopped")
+
+
+app = FastAPI(title="Globtour GPS Server", lifespan=lifespan)
 templates = Jinja2Templates(directory=str(BASE / "templates"))
 
 
@@ -324,20 +345,6 @@ async def handle_tracker(reader, writer):
             await writer.wait_closed()
         except Exception:
             pass
-
-
-async def gps_server():
-    server = await asyncio.start_server(handle_tracker, TCP_HOST, TCP_PORT)
-    sockets = ", ".join(str(s.getsockname()) for s in server.sockets or [])
-    print(f"[GPS] TCP listener running on {sockets}")
-    async with server:
-        await server.serve_forever()
-
-
-@app.on_event("startup")
-async def startup():
-    init_db()
-    asyncio.create_task(gps_server())
 
 
 @app.get("/", response_class=HTMLResponse)
