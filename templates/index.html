@@ -454,7 +454,7 @@ async function showHistory(){
  $('historyModal').classList.add('show');$('historyBackdrop').classList.add('show');
  setTimeout(()=>{map.invalidateSize({animate:false});},30);
 }
-function closeHistory(){stopHistoryReplay();$('historyModal').classList.remove('show');$('historyBackdrop').classList.remove('show'); if(selected && dataById[selected]) $('detail').classList.add('show'); setTimeout(()=>map.invalidateSize({animate:false}),30);}
+function closeHistory(){stopHistoryReplay();clearHistoryVisuals();historyPoints=[];historyCumulativePoints=[];historyCumulativeTotal=0;historyCumulativeTotalBeforeDay=0;historyStartMs=0;historyEndMs=0;$('historyModal').classList.remove('show');$('historyBackdrop').classList.remove('show'); if(selected && dataById[selected]) $('detail').classList.add('show'); setTimeout(()=>map.invalidateSize({animate:false}),30);}
 async function loadHistory(){
  if(!selected)return;
  stopHistoryReplay(); clearHistoryVisuals();
@@ -609,7 +609,7 @@ async function showHistory(){
  $('historyModal').classList.add('show');$('historyBackdrop').classList.add('show');
  setTimeout(()=>{map.invalidateSize({animate:false});},30);
 }
-function closeHistory(){stopHistoryReplay();$('historyModal').classList.remove('show');$('historyBackdrop').classList.remove('show'); if(selected && dataById[selected]) $('detail').classList.add('show'); setTimeout(()=>map.invalidateSize({animate:false}),30);}
+function closeHistory(){stopHistoryReplay();clearHistoryVisuals();historyPoints=[];historyCumulativePoints=[];historyCumulativeTotal=0;historyCumulativeTotalBeforeDay=0;historyStartMs=0;historyEndMs=0;$('historyModal').classList.remove('show');$('historyBackdrop').classList.remove('show'); if(selected && dataById[selected]) $('detail').classList.add('show'); setTimeout(()=>map.invalidateSize({animate:false}),30);}
 async function loadHistory(){
  if(!selected)return;
  stopHistoryReplay(); clearHistoryVisuals();
@@ -641,7 +641,8 @@ async function loadHistory(){
   $('historyMsg').textContent=`Trasa učitana: ${historyPoints.length} GPS točaka. Povucite klizač ili pokrenite Replay.`;
  }catch(e){$('historyMsg').textContent='Greška pri učitavanju povijesti.';}
 }
-$('search').addEventListener('input',()=>renderList(lastData));\n$('sortVehicles').addEventListener('change',()=>renderList(lastData));
+$('search').addEventListener('input',()=>renderList(lastData));
+$('sortVehicles').addEventListener('change',()=>renderList(lastData));
 $('fitBtn').onclick=()=>{const pts=Object.values(markers).map(m=>m.getLatLng());if(pts.length)map.fitBounds(L.latLngBounds(pts),{padding:[40,40]});};
 $('trackBtn').onclick=showHistory; $('historyShow').onclick=loadHistory; $('historyClose').onclick=closeHistory; $('historyBackdrop').onclick=closeHistory; $('historyPlay').onclick=startHistoryReplay; $('historyPause').onclick=stopHistoryReplay; $('historySlider').oninput=e=>updateHistoryReplay(e.target.value); document.querySelectorAll('[data-speed]').forEach(b=>b.onclick=()=>{historySpeed=Number(b.dataset.speed)||1;document.querySelectorAll('[data-speed]').forEach(x=>x.classList.remove('active'));b.classList.add('active');if(historyReplayTimer)startHistoryReplay();});
 $('closeDetail').onclick=()=>{$('detail').classList.remove('show');selected=null;document.querySelectorAll('.vehicle').forEach(x=>x.classList.remove('active'));};
