@@ -279,8 +279,10 @@ function renderList(data){
      return label(a).localeCompare(label(b),'hr',{sensitivity:'base',numeric:true});
    }
    if(sortMode==='last'){
+     // Najnovije javljanje uvijek ide na vrh. Ako je vrijeme isto, registracija A–Ž.
      const diff=lastSeenMs(b)-lastSeenMs(a);
-     return diff || label(a).localeCompare(label(b),'hr',{sensitivity:'base',numeric:true});
+     if(diff !== 0) return diff;
+     return label(a).localeCompare(label(b),'hr',{sensitivity:'base',numeric:true});
    }
    const sa=statusForList(a), sb=statusForList(b);
    const rankDiff=statusRank(sa)-statusRank(sb);
@@ -671,7 +673,11 @@ $('sortVehicles').addEventListener('change',()=>renderList(lastData));
 $('fitBtn').onclick=()=>{const pts=Object.values(markers).map(m=>m.getLatLng());if(pts.length)map.fitBounds(L.latLngBounds(pts),{padding:[40,40]});};
 $('trackBtn').onclick=showHistory; $('historyShow').onclick=loadHistory; $('historyClose').onclick=closeHistory; $('historyBackdrop').onclick=closeHistory; $('historyPlay').onclick=startHistoryReplay; $('historyPause').onclick=stopHistoryReplay; $('historySlider').oninput=e=>updateHistoryReplay(e.target.value); document.querySelectorAll('[data-speed]').forEach(b=>b.onclick=()=>{historySpeed=Number(b.dataset.speed)||1;document.querySelectorAll('[data-speed]').forEach(x=>x.classList.remove('active'));b.classList.add('active');if(historyReplayTimer)startHistoryReplay();});
 $('closeDetail').onclick=()=>{$('detail').classList.remove('show');selected=null;document.querySelectorAll('.vehicle').forEach(x=>x.classList.remove('active'));};
-load();setInterval(load,5000); refreshParkingStatuses(); setInterval(refreshParkingStatuses,30000);
+load();
+// Redovito osvježavanje: kada uređaj pošalje novi paket, /api/devices dobije novi last_seen,
+// a renderList ponovno sortira popis pa vozilo s najnovijim javljanjem ide na vrh.
+setInterval(load,3000);
+refreshParkingStatuses(); setInterval(refreshParkingStatuses,30000);
 </script>
 </body>
 </html>
