@@ -299,11 +299,14 @@ function effectiveSeenMs(d){
 }
 function isOnline(d){
  if(!d) return false;
- // Ako backend vraća server-authoritative status, njega koristimo.
- // Time F5/refresh ne može sam promijeniti status vozila.
+ // Operativni status koji je server izračunao je autoritativan.
+ // PARKIRAN, ZAUSTAVLJEN i U VOŽNJI uvijek znače da je vozilo ONLINE.
+ const serverStatus=String(d.status||'').trim().toUpperCase();
+ if(serverStatus==='U VOŽNJI' || serverStatus==='PARKIRAN' || serverStatus==='ZAUSTAVLJEN') return true;
+ if(serverStatus==='OFFLINE') return false;
+ // Ako status nije dostupan, koristi serverovo online polje.
  if(typeof d.online === 'boolean') return d.online;
- // Fallback: koristi ISKLJUČIVO serverovo last_seen.
- // Ne uspoređujemo ga s ts_utc jer je ts_utc vrijeme GPS zapisa i može biti starije.
+ // Zadnji fallback: isključivo serverovo last_seen.
  const ms=parseSeenMs(d.last_seen);
  if(!ms) return false;
  const age=Date.now()-ms;
@@ -491,12 +494,15 @@ async function saveVehicle(imei){
  }
 }
 function statusForList(d){
-  const on=isOnline(d);
-  if(!on) return {key:'offline',label:'OFFLINE',parkedMin:0};
-  const status=String(d?.status||'').toUpperCase();
+  // Status koji dolazi sa servera ima prednost nad lokalnim računanjem.
+  const status=String(d?.status||'').trim().toUpperCase();
   if(status==='U VOŽNJI') return {key:'moving',label:'U VOŽNJI',parkedMin:0};
   if(status==='PARKIRAN') return {key:'parked',label:'PARKIRAN',parkedMin:0};
   if(status==='ZAUSTAVLJEN') return {key:'stopped',label:'ZAUSTAVLJEN',parkedMin:0};
+  if(status==='OFFLINE') return {key:'offline',label:'OFFLINE',parkedMin:0};
+
+  const on=isOnline(d);
+  if(!on) return {key:'offline',label:'OFFLINE',parkedMin:0};
   return Number(d.speed_kmh||0)>1
     ? {key:'moving',label:'U VOŽNJI',parkedMin:0}
     : {key:'stopped',label:'ZAUSTAVLJEN',parkedMin:0};
