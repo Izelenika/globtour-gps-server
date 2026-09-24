@@ -33,9 +33,9 @@ header{height:64px;background:var(--yellow);display:flex;align-items:center;just
 .vehicle-map-label{
   background:#17202a;
   color:#fff;
-  border:2px solid rgba(255,255,255,.95);
+  border:0;
   border-radius:6px;
-  box-shadow:0 2px 6px rgba(0,0,0,.35);
+  box-shadow:none;
   font-weight:700;
   font-size:12px;
   line-height:1;
@@ -1005,7 +1005,7 @@ async function loadHistory(){
   const drivingStats=analyzeDrivingHistory(historyPoints);
   const historyStops=detectHistoryStops(historyPoints);
   renderHistoryStops(historyStops);
-  $('hsDistance').textContent=Number(sm.distance_km||historyCumulativeTotal||0).toLocaleString('hr-HR',{maximumFractionDigits:2})+' km';
+  $('hsDistance').textContent=Number(historyCumulativeTotal||0).toLocaleString('hr-HR',{maximumFractionDigits:2})+' km';
   $('hsDriveTime').textContent=formatDurationMinutes(drivingStats.driveMinutes);
   $('hsAvg').textContent=Number(drivingStats.avg||0).toLocaleString('hr-HR',{maximumFractionDigits:1})+' km/h';
   $('hsMax').textContent=Number(Math.max(sm.max_speed_kmh||0,drivingStats.max||0)).toLocaleString('hr-HR',{maximumFractionDigits:1})+' km/h';
