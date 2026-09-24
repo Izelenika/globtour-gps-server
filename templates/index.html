@@ -23,7 +23,7 @@ header{height:64px;background:var(--yellow);display:flex;align-items:center;just
 .map-wrap{position:relative;min-width:0}.map{height:100%;width:100%}.map-toolbar{position:absolute;top:14px;right:14px;z-index:800;display:flex;gap:7px}.tool{background:#fff;border:1px solid #dfe4e8;border-radius:9px;padding:9px 11px;font-size:12px;cursor:pointer;box-shadow:0 2px 8px #0002}.tool:hover{background:#f8f9fa}
 .detail{position:absolute;right:14px;bottom:14px;width:380px;max-height:calc(100% - 28px);background:#fff;border-radius:13px;box-shadow:0 5px 25px #0003;z-index:800;display:none;overflow:auto}.detail.show{display:block}.detail-head{background:#17202a;color:#fff;padding:13px 15px;display:flex;justify-content:space-between;align-items:center;position:sticky;top:0}.detail-head .close{cursor:pointer;font-size:20px}.detail-body{padding:13px 15px}.detail-section{font-size:11px;text-transform:uppercase;color:var(--muted);font-weight:700;margin:3px 0 8px}.detail-row{display:flex;justify-content:space-between;gap:18px;padding:8px 0;border-bottom:1px solid #eef1f3;font-size:12px}.detail-row:last-child{border-bottom:0}.detail-row span{color:var(--muted)}
 .form{margin-top:10px;padding-top:10px;border-top:1px solid var(--line)}.form label{display:block;font-size:11px;font-weight:700;color:var(--muted);margin:9px 0 4px}.form input,.form textarea{width:100%;border:1px solid #d6dce2;border-radius:8px;padding:8px 9px;font:inherit;font-size:12px;outline:none}.form textarea{min-height:64px;resize:vertical}.form input:focus,.form textarea:focus{border-color:#aab6c2;box-shadow:0 0 0 3px #0000000a}.form-actions{display:flex;gap:8px;margin-top:12px}.btn{border:1px solid #d6dce2;background:#fff;border-radius:8px;padding:8px 11px;font-size:12px;cursor:pointer}.btn.primary{background:var(--yellow);border-color:#e1bd00;font-weight:700}.save-msg{font-size:11px;color:var(--green);margin-top:7px;min-height:14px}
-.history-modal{position:absolute;left:50%;bottom:18px;transform:translateX(-50%);width:min(820px,calc(100% - 28px));max-height:calc(100% - 24px);overflow:auto;background:#fff;border:1px solid var(--line);border-radius:14px;box-shadow:0 12px 45px #0004;z-index:1200;display:none}.history-modal.show{display:block}.history-head{display:flex;justify-content:space-between;align-items:center;padding:14px 16px;border-bottom:1px solid var(--line);font-weight:800}.history-body{padding:10px 14px}.history-filters{display:grid;grid-template-columns:1fr 1fr auto;gap:8px;align-items:end}.history-filters label{display:block;font-size:11px;color:var(--muted);font-weight:700;margin-bottom:4px}.history-filters input{width:100%;height:36px;border:1px solid #d6dce2;border-radius:8px;padding:0 9px;font:inherit;font-size:12px}.history-summary{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;margin-top:8px}.hs{background:#f7f9fa;border-radius:8px;padding:6px 8px}.hs b{display:block;font-size:14px}.hs span{font-size:9px;color:var(--muted)}.history-msg{font-size:11px;color:var(--muted);margin-top:9px;min-height:15px}.history-close{cursor:pointer;font-size:22px;color:var(--muted);line-height:1}.history-backdrop{position:absolute;inset:0;background:#0002;z-index:1100;display:none}.history-backdrop.show{display:block}.legend{position:absolute;left:14px;bottom:14px;z-index:800;background:#fff;border-radius:9px;padding:9px 11px;box-shadow:0 2px 10px #0002;font-size:11px}.legend i{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px;background:var(--green)}.history-replay{margin-top:8px;border-top:1px solid var(--line);padding-top:8px;display:flex;flex-direction:column}.history-time{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:7px}.history-time strong{font-size:22px;letter-spacing:.5px;font-variant-numeric:tabular-nums}.history-time span{font-size:11px;color:var(--muted)}.history-slider{width:100%;height:28px;accent-color:#e5bd00;cursor:pointer;margin-top:5px}.history-slider:disabled{opacity:.45}.history-ticks{display:flex;justify-content:space-between;font-size:9px;color:var(--muted);margin-top:2px}.replay-actions{display:flex;align-items:center;gap:6px;flex-wrap:nowrap;margin-top:7px}.replay-actions .btn.active{background:#17202a;color:#fff;border-color:#17202a}.replay-help{font-size:10px;color:var(--muted);margin-left:auto;white-space:nowrap}.history-full-route{stroke-dasharray:4 5}
+.history-modal{position:absolute;left:50%;bottom:18px;transform:translateX(-50%);width:min(820px,calc(100% - 28px));max-height:calc(100% - 24px);overflow:auto;background:#fff;border:1px solid var(--line);border-radius:14px;box-shadow:0 12px 45px #0004;z-index:1200;display:none}.history-modal.show{display:block}.history-head{display:flex;justify-content:space-between;align-items:center;padding:14px 16px;border-bottom:1px solid var(--line);font-weight:800}.history-body{padding:10px 14px}.history-filters{display:grid;grid-template-columns:1fr 1fr auto;gap:8px;align-items:end}.history-filters label{display:block;font-size:11px;color:var(--muted);font-weight:700;margin-bottom:4px}.history-filters input{width:100%;height:36px;border:1px solid #d6dce2;border-radius:8px;padding:0 9px;font:inherit;font-size:12px}.history-summary{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;margin-top:8px}.hs{background:#f7f9fa;border-radius:8px;padding:6px 8px}.hs b{display:block;font-size:14px}.hs span{font-size:9px;color:var(--muted)}.history-msg{font-size:11px;color:var(--muted);margin-top:9px;min-height:15px}.history-summary{grid-template-columns:repeat(6,minmax(0,1fr))}.hs b{white-space:nowrap}.hs span{font-size:9px}.history-close{cursor:pointer;font-size:22px;color:var(--muted);line-height:1}.history-backdrop{position:absolute;inset:0;background:#0002;z-index:1100;display:none}.history-backdrop.show{display:block}.legend{position:absolute;left:14px;bottom:14px;z-index:800;background:#fff;border-radius:9px;padding:9px 11px;box-shadow:0 2px 10px #0002;font-size:11px}.legend i{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px;background:var(--green)}.history-replay{margin-top:8px;border-top:1px solid var(--line);padding-top:8px;display:flex;flex-direction:column}.history-time{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:7px}.history-time strong{font-size:22px;letter-spacing:.5px;font-variant-numeric:tabular-nums}.history-time span{font-size:11px;color:var(--muted)}.history-slider{width:100%;height:28px;accent-color:#e5bd00;cursor:pointer;margin-top:5px}.history-slider:disabled{opacity:.45}.history-ticks{display:flex;justify-content:space-between;font-size:9px;color:var(--muted);margin-top:2px}.replay-actions{display:flex;align-items:center;gap:6px;flex-wrap:nowrap;margin-top:7px}.replay-actions .btn.active{background:#17202a;color:#fff;border-color:#17202a}.replay-help{font-size:10px;color:var(--muted);margin-left:auto;white-space:nowrap}.history-full-route{stroke-dasharray:4 5}
 @media(max-width:850px){body{overflow:auto}.app{height:auto;min-height:calc(100vh - 64px);grid-template-columns:1fr}.sidebar{height:420px}.map-wrap{height:calc(100vh - 484px);min-height:430px}.detail{width:calc(100% - 28px)}}
 </style>
 </head>
@@ -59,7 +59,9 @@ header{height:64px;background:var(--yellow);display:flex;align-items:center;just
           <button class="btn primary" id="historyShow">Prikaži trasu</button>
         </div>
         <div class="history-summary">
-          <div class="hs"><b id="hsDistance">0 km</b><span>PRIJEĐENO</span></div>
+          <div class="hs"><b id="hsDistance">0 km</b><span>PRIJEĐENO TAJ DAN</span></div>
+          <div class="hs"><b id="hsAtMoment">0 km</b><span>PRIJEĐENO DO TRENUTKA</span></div>
+          <div class="hs"><b id="hsTotal">-</b><span>UKUPNA KM VOZILA</span></div>
           <div class="hs"><b id="hsMax">0 km/h</b><span>MAKS. BRZINA</span></div>
           <div class="hs"><b id="hsStops">0</b><span>ZAUSTAVLJANJA</span></div>
           <div class="hs"><b id="hsPoints">0</b><span>GPS TOČAKA</span></div>
@@ -163,6 +165,8 @@ function detailForm(d){
    <label>Marka / model</label><input id="f_make_model" value="${esc(d.make_model||'')}">
    <label>Tip vozila</label><input id="f_vehicle_type" value="${esc(d.vehicle_type||'')}">
    <label>Godina proizvodnje</label><input id="f_production_year" inputmode="numeric" value="${esc(d.production_year||'')}">
+   <label>Početna kilometraža vozila (km)</label><input id="f_initial_km" inputmode="decimal" value="${esc(getInitialKm(d.imei)??'')}">
+   <div style="font-size:10px;color:var(--muted);margin-top:4px">Ovu vrijednost unesite samo jednom. Nakon toga aplikacija automatski dodaje kilometre iz GPS podataka.</div>
    <label>IMEI</label><input value="${esc(d.imei)}" disabled>
    <label>Napomena</label><textarea id="f_note">${esc(d.note||'')}</textarea>
    <div class="form-actions">
@@ -207,6 +211,9 @@ function showDetails(d){
 }
 
 async function saveVehicle(imei){
+ const initialRaw=$('f_initial_km')?.value.trim().replace(',','.');
+ const initialKm=Number(initialRaw);
+ if(initialRaw && (!Number.isFinite(initialKm)||initialKm<0)){ $('saveMsg').textContent='Početna kilometraža nije ispravna.'; $('saveMsg').style.color='#c73535'; return; }
  const body={
    registration:$('f_registration').value.trim(),
    make_model:$('f_make_model').value.trim(),
@@ -224,6 +231,8 @@ async function saveVehicle(imei){
      body:JSON.stringify(body)
    });
    if(!r.ok)throw new Error('Greška');
+   if(initialRaw){localStorage.setItem(KM_KEY_PREFIX+imei,String(initialKm)); if(!getInitialKmDate(imei))localStorage.setItem(KM_DATE_PREFIX+imei,localDateInput());}
+   else {localStorage.removeItem(KM_KEY_PREFIX+imei);localStorage.removeItem(KM_DATE_PREFIX+imei);}
    await load();
    if(dataById[imei])renderVehicleDetails(dataById[imei],false);
  }catch(e){
@@ -247,6 +256,209 @@ function renderList(data){
   if(d.latitude!=null&&d.longitude!=null){if(!markers[d.imei])markers[d.imei]=L.marker([d.latitude,d.longitude],{icon:makeIcon(on,d.angle)}).addTo(map);else{markers[d.imei].setLatLng([d.latitude,d.longitude]).setIcon(makeIcon(on,d.angle));}markers[d.imei].bindPopup(`<b>${esc(label(d))}</b><br>${esc(d.make_model||'')}<br>${on?'ONLINE':'OFFLINE'}<br>Brzina: ${d.speed_kmh??'-'} km/h<br>Vrijeme: ${fmtTime(d.ts_utc)}`);}
  });
 }
+async function load(){try{const r=await fetch('/api/devices',{cache:'no-store'});const data=await r.json();lastData=data;renderList(data);}catch(e){$('updated').textContent='Greška veze';}}
+function localDateInput(){const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;}
+function historyPointTime(p){return new Date(p.ts_utc).getTime();}
+function historyLocalTime(ms){return new Intl.DateTimeFormat('hr-HR',{timeZone:'Europe/Sarajevo',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false}).format(new Date(ms));}
+function historySliderTime(ms){return new Intl.DateTimeFormat('hr-HR',{timeZone:'Europe/Sarajevo',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false}).format(new Date(ms));}
+function clearHistoryVisuals(){
+ if(historyReplayTimer){clearInterval(historyReplayTimer);historyReplayTimer=null;}
+ if(historyFullLine){historyFullLine.remove();historyFullLine=null;}
+ if(historyPlayedLine){historyPlayedLine.remove();historyPlayedLine=null;}
+ if(historyReplayMarker){historyReplayMarker.remove();historyReplayMarker=null;}
+}
+function nearestHistoryIndex(targetMs){
+ if(!historyPoints.length)return -1;
+ let lo=0,hi=historyPoints.length-1;
+ if(historyPointTime(historyPoints[0])>=targetMs)return 0;
+ if(historyPointTime(historyPoints[hi])<=targetMs)return hi;
+ while(lo<=hi){const mid=(lo+hi)>>1;const t=historyPointTime(historyPoints[mid]);if(t===targetMs)return mid;if(t<targetMs)lo=mid+1;else hi=mid-1;}
+ return Math.max(0,lo-1);
+}
+const KM_KEY_PREFIX='globtourInitialKm_';
+const KM_DATE_PREFIX='globtourInitialKmDate_';
+let historyCumulativePoints=[];
+let historyCumulativeTotal=0;
+let historyCumulativeTotalBeforeDay=0;
+
+function getInitialKm(imei){
+ const v=localStorage.getItem(KM_KEY_PREFIX+imei);
+ const n=Number(v);
+ return Number.isFinite(n)&&n>=0?n:null;
+}
+function getInitialKmDate(imei){
+ return localStorage.getItem(KM_DATE_PREFIX+imei) || '';
+}
+function fmtKm(v){
+ return Number(v||0).toLocaleString('hr-HR',{minimumFractionDigits:1,maximumFractionDigits:1})+' km';
+}
+function haversineKm(a,b){
+ const R=6371, rad=Math.PI/180;
+ const dLat=(Number(b.latitude)-Number(a.latitude))*rad;
+ const dLon=(Number(b.longitude)-Number(a.longitude))*rad;
+ const la1=Number(a.latitude)*rad, la2=Number(b.latitude)*rad;
+ const x=Math.sin(dLat/2)**2+Math.sin(dLon/2)**2*Math.cos(la1)*Math.cos(la2);
+ return 2*R*Math.asin(Math.min(1,Math.sqrt(x)));
+}
+function buildCumulative(points){
+ let cum=0, arr=[];
+ for(let i=0;i<points.length;i++){
+   if(i>0){
+     const a=points[i-1],b=points[i];
+     const dt=(historyPointTime(b)-historyPointTime(a))/1000;
+     const dist=haversineKm(a,b);
+     const segSpeed=dt>0?dist/(dt/3600):999;
+     // Ignoriraj očite GPS skokove / nerealne segmente.
+     if(dt>0 && dt<=15*60 && dist<=20 && segSpeed<=140) cum+=dist;
+   }
+   arr.push(cum);
+ }
+ return arr;
+}
+function cumulativeAtPoint(idx){
+ if(!historyCumulativePoints.length)return 0;
+ return historyCumulativePoints[Math.max(0,Math.min(idx,historyCumulativePoints.length-1))]||0;
+}
+async function loadVehicleCumulativeKm(imei,toDate){
+ const initial=getInitialKm(imei), initialDate=getInitialKmDate(imei);
+ if(initial===null)return null;
+ const today=toDate || localDateInput();
+ const from=initialDate || today;
+ if(from>today)return initial;
+ try{
+   const r=await fetch('/api/history/'+encodeURIComponent(imei)+'?from='+encodeURIComponent(from)+'&to='+encodeURIComponent(today)+'&limit=20000',{cache:'no-store'});
+   if(!r.ok)return initial;
+   const d=await r.json();
+   const pts=(d.points||[]).filter(p=>p.latitude!=null&&p.longitude!=null).sort((a,b)=>historyPointTime(a)-historyPointTime(b));
+   if(pts.length<2)return initial;
+   return initial+buildCumulative(pts).at(-1);
+ }catch(e){return initial;}
+}
+
+function updateHistoryReplay(minute){
+ if(!historyPoints.length)return;
+ historyReplayMinute=Math.max(0,Math.min(1440,Number(minute)||0));
+ $('historySlider').value=historyReplayMinute;
+
+ const target=historyStartMs+historyReplayMinute*60000;
+ const idx=nearestHistoryIndex(target); if(idx<0)return;
+ const p=historyPoints[idx];
+
+ const latlngs=historyPoints.slice(0,idx+1).map(x=>[x.latitude,x.longitude]);
+ if(!historyPlayedLine)historyPlayedLine=L.polyline(latlngs,{weight:5,opacity:.95,color:'#e0b900'}).addTo(map);
+ else historyPlayedLine.setLatLngs(latlngs);
+
+ if(!historyReplayMarker){
+   historyReplayMarker=L.marker([p.latitude,p.longitude],{icon:makeIcon(true,p.angle),zIndexOffset:1000}).addTo(map);
+ }else{
+   historyReplayMarker.setLatLng([p.latitude,p.longitude]).setIcon(makeIcon(true,p.angle));
+ }
+
+ map.panTo([p.latitude,p.longitude],{animate:false});
+
+ const speed=Number(p.speed_kmh||0);
+ const angle=Number(p.angle||0);
+ const driven=cumulativeAtPoint(idx);
+ const initial=getInitialKm(selected);
+ const totalAtMoment=initial===null?null:initial+historyCumulativeTotalBeforeDay+driven;
+
+ $('historyReplayTime').textContent=historySliderTime(target);
+ $('hsAtMoment').textContent=fmtKm(driven);
+ $('hsTotal').textContent=totalAtMoment===null?'-':fmtKm(totalAtMoment);
+ $('historyReplayInfo').textContent=`GPS zapis ${historyLocalTime(historyPointTime(p))} • ${speed.toLocaleString('hr-HR',{maximumFractionDigits:1})} km/h • smjer ${angle}° • ukupno vozila ${totalAtMoment===null?'-':fmtKm(totalAtMoment)}`;
+}
+function stopHistoryReplay(){if(historyReplayTimer){clearInterval(historyReplayTimer);historyReplayTimer=null;}}
+function startHistoryReplay(){
+ if(!historyPoints.length)return;
+ stopHistoryReplay();
+ if(historyReplayMinute>=1440 || historyStartMs+historyReplayMinute*60000>=historyEndMs)updateHistoryReplay(0);
+ historyReplayTimer=setInterval(()=>{
+   const next=historyReplayMinute+1;
+   if(next>=1440 || historyStartMs+next*60000>historyEndMs){updateHistoryReplay(Math.min(1440,Math.ceil((historyEndMs-historyStartMs)/60000)));stopHistoryReplay();return;}
+   updateHistoryReplay(next);
+ },Math.max(30,250/historySpeed));
+}
+async function showHistory(){
+ if(!selected){
+   if(lastData.length===1){selected=lastData[0].imei;document.querySelectorAll('.vehicle').forEach(x=>x.classList.toggle('active',x.dataset.id===selected));}
+   else{alert('Prvo odaberite vozilo.');return;}
+ }
+ const d=dataById[selected] || lastData.find(x=>x.imei===selected); if(!d){alert('Vozilo nije pronađeno.');return;}
+ $('historyTitle').textContent='Povijest trase – '+label(d);
+ const today=localDateInput(); if(!$('historyFrom').value)$('historyFrom').value=today; if(!$('historyTo').value)$('historyTo').value=today;
+ $('historyModal').classList.add('show');$('historyBackdrop').classList.add('show');
+}
+function closeHistory(){stopHistoryReplay();$('historyModal').classList.remove('show');$('historyBackdrop').classList.remove('show');}
+async function loadHistory(){
+ if(!selected)return;
+ stopHistoryReplay(); clearHistoryVisuals();
+ const from=$('historyFrom').value,to=$('historyTo').value;
+ if(!from||!to){$('historyMsg').textContent='Odaberite oba datuma.';return;}
+ $('historyMsg').textContent='Učitavam povijest...';
+ try{
+  const r=await fetch('/api/history/'+encodeURIComponent(selected)+'?from='+encodeURIComponent(from)+'&to='+encodeURIComponent(to)+'&limit=20000',{cache:'no-store'});
+  if(!r.ok)throw new Error('HTTP '+r.status);
+  const data=await r.json(); const sm=data.summary||{};
+  historyPoints=(data.points||[]).filter(p=>p.latitude!=null&&p.longitude!=null).sort((a,b)=>historyPointTime(a)-historyPointTime(b));
+  historyCumulativePoints=buildCumulative(historyPoints);
+  historyCumulativeTotal=historyCumulativePoints.length?historyCumulativePoints.at(-1):0;
+
+  $('hsDistance').textContent=Number(sm.distance_km||historyCumulativeTotal||0).toLocaleString('hr-HR',{maximumFractionDigits:2})+' km';
+  $('hsAtMoment').textContent='0,0 km';
+  $('hsMax').textContent=Number(sm.max_speed_kmh||0).toLocaleString('hr-HR',{maximumFractionDigits:1})+' km/h';
+  $('hsStops').textContent=sm.stops||0; $('hsPoints').textContent=sm.points||0;
+
+  const initial=getInitialKm(selected);
+  $('hsTotal').textContent=initial===null?'-':fmtKm(initial);
+
+  // Ako je početna kilometraža unesena ranije, računamo sve GPS kilometre
+  // od datuma unosa do početka odabranog dana.
+  historyCumulativeTotalBeforeDay=0;
+  const initialDate=getInitialKmDate(selected);
+  if(initial!==null && initialDate && initialDate<from){
+    try{
+      const rr=await fetch('/api/history/'+encodeURIComponent(selected)+'?from='+encodeURIComponent(initialDate)+'&to='+encodeURIComponent(from)+'&limit=20000',{cache:'no-store'});
+      if(rr.ok){
+        const prev=await rr.json();
+        const pp=(prev.points||[]).filter(p=>p.latitude!=null&&p.longitude!=null).sort((a,b)=>historyPointTime(a)-historyPointTime(b));
+        // Uključi samo točke prije odabranog dana.
+        const before=pp.filter(p=>new Date(p.ts_utc).toLocaleDateString('en-CA',{timeZone:'Europe/Sarajevo'})<from);
+        if(before.length>1)historyCumulativeTotalBeforeDay=buildCumulative(before).at(-1)||0;
+      }
+    }catch(e){}
+  }
+
+  if(historyPoints.length<2){$('historyMsg').textContent='Za odabrani dan nema dovoljno GPS podataka za trasu.';$('historySlider').disabled=true;return;}
+  historyStartMs=new Date(from+'T00:00:00+02:00').getTime();
+  historyEndMs=new Date(to+'T23:59:59+02:00').getTime();
+  historyStartMs=Math.min(historyStartMs,historyPointTime(historyPoints[0]));
+  historyEndMs=Math.max(historyEndMs,historyPointTime(historyPoints[historyPoints.length-1]));
+  const fullLatLngs=historyPoints.map(p=>[p.latitude,p.longitude]);
+  historyFullLine=L.polyline(fullLatLngs,{weight:4,opacity:.28,color:'#6b7280',className:'history-full-route'}).addTo(map);
+  historyPlayedLine=L.polyline([], {weight:5,opacity:.95,color:'#e0b900'}).addTo(map);
+  $('historySlider').disabled=false; $('historySlider').min=0; $('historySlider').max=Math.max(1,Math.ceil((historyEndMs-historyStartMs)/60000)); $('historySlider').value=0;
+  updateHistoryReplay(0);
+  map.fitBounds(historyFullLine.getBounds(),{padding:[35,35]});
+  $('historyMsg').textContent=`Trasa učitana: ${historyPoints.length} GPS točaka. Povucite klizač ili pokrenite Replay.`;
+ }catch(e){$('historyMsg').textContent='Greška pri učitavanju povijesti.';}
+}
+function renderList(data){
+ const q=$('search').value.trim().toLowerCase(); const filtered=data.filter(d=>(label(d)+' '+(d.make_model||'')+' '+(d.vehicle_type||'')+' '+(d.imei||'')).toLowerCase().includes(q));
+ $('total').textContent=data.length; $('online').textContent=data.filter(isOnline).length; $('moving').textContent=data.filter(d=>Number(d.speed_kmh||0)>1).length; $('updated').textContent='Ažurirano '+new Date().toLocaleTimeString('hr-HR',{hour12:false});
+ const box=$('devices'); if(!filtered.length){box.innerHTML='<div class="empty">Nema vozila za prikaz.</div>';return;} box.innerHTML='';
+ filtered.forEach(d=>{dataById[d.imei]=d; const on=isOnline(d); const el=document.createElement('div'); el.className='vehicle'+(selected===d.imei?' active':''); el.dataset.id=d.imei;
+  const title=label(d); const subtitle=[d.make_model,d.vehicle_type,d.production_year].filter(Boolean).join(' • ');
+  const baseStatus=on?(Number(d.speed_kmh||0)>1?{key:'moving',label:'U VOŽNJI'}:{key:'stopped',label:'ZAUSTAVLJEN'}):{key:'offline',label:'OFFLINE'};
+  statusById[d.imei]=baseStatus;
+  el.innerHTML=`<div class="vtop"><div class="vname">🚌 ${esc(title)}</div><span id="status-${esc(d.imei)}">${statusBadgeHtml(baseStatus)}</span></div>
+  <div class="vsub">${esc(subtitle||'Podaci vozila nisu uneseni')}</div>
+  <div class="vmeta">IMEI: ${esc(d.imei)}</div>
+  <div class="vgrid"><div class="metric"><b>${d.speed_kmh??'-'} km/h</b><span>BRZINA</span></div><div class="metric"><b>${d.angle??'-'}°</b><span>SMJER</span></div><div class="metric"><b>${d.satellites??'-'}</b><span>SATELITI</span></div></div>`;
+  el.onclick=()=>{showDetails(d);if(d.latitude!=null&&d.longitude!=null){map.setView([d.latitude,d.longitude],15);markers[d.imei]?.openPopup();}}; box.appendChild(el);
+  if(d.latitude!=null&&d.longitude!=null){if(!markers[d.imei])markers[d.imei]=L.marker([d.latitude,d.longitude],{icon:makeIcon(on,d.angle)}).addTo(map);else{markers[d.imei].setLatLng([d.latitude,d.longitude]).setIcon(makeIcon(on,d.angle));}markers[d.imei].bindPopup(`<b>${esc(label(d))}</b><br>${esc(d.make_model||'')}<br>${on?'ONLINE':'OFFLINE'}<br>Brzina: ${d.speed_kmh??'-'} km/h<br>Vrijeme: ${fmtTime(d.ts_utc)}`);}
+ });
+}
+
 async function load(){try{const r=await fetch('/api/devices',{cache:'no-store'});const data=await r.json();lastData=data;renderList(data);}catch(e){$('updated').textContent='Greška veze';}}
 function localDateInput(){const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;}
 function historyPointTime(p){return new Date(p.ts_utc).getTime();}
