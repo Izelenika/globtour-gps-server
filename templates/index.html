@@ -871,7 +871,59 @@ function renderHistoryStops(stops){
 }
 function detectTrips(points){const o=points.slice().filter(p=>p.ts_utc).sort((a,b)=>historyPointTime(a)-historyPointTime(b)),trips=[],MIN=120000,MAX=1200000,m=p=>Number(p.speed_kmh||0)>1;let st=null,lm=null,ss=null;for(let i=0;i<o.length;i++){const p=o[i],t=historyPointTime(p);if(i&&t-historyPointTime(o[i-1])>MAX){if(st!==null&&lm!==null)addTrip(st,lm,o,trips);st=lm=ss=null}if(m(p)){if(st===null)st=i;lm=i;if(ss!==null){if(t-historyPointTime(o[ss])>=MIN){addTrip(st,lm,o,trips);st=i}ss=null}}else if(st!==null){if(ss===null)ss=i;if(t-historyPointTime(o[ss])>=MIN&&lm!==null){addTrip(st,lm,o,trips);st=lm=null}}}if(st!==null&&lm!==null)addTrip(st,lm,o,trips);return trips}
 function addTrip(a,b,p,trips){if(b<a)return;const q=p.slice(a,b+1);if(q.length<2)return;let d=0,mx=0;for(let i=1;i<q.length;i++){d+=haversineKm(q[i-1],q[i]);mx=Math.max(mx,Number(q[i-1].speed_kmh||0),Number(q[i].speed_kmh||0))}const s=historyPointTime(q[0]),e=historyPointTime(q[q.length-1]),min=Math.max(0,(e-s)/60000);trips.push({startMs:s,endMs:e,distance:d,maxSpeed:mx,avg:min?d/(min/60):0,startPoint:q[0],endPoint:q[q.length-1]})}
-function renderTrips(trips){const box=$('tripList'),info=$('tripListInfo');if(!box)return;if(!trips.length){box.innerHTML='<div class="trip-empty">Nije prepoznato nijedno putovanje. Potrebna su najmanje 2 GPS podatka tijekom vožnje.</div>';if(info)info.textContent='0 putovanja';return}if(info)info.textContent=`${trips.length} ${trips.length===1?'putovanje':'putovanja'}`;box.innerHTML=trips.map((t,i)=>{const dur=formatDurationMinutes((t.endMs-t.startMs)/60000),a=historyLocalTime(t.startMs),b=historyLocalTime(t.endMs),sc=`${Number(t.startPoint.latitude).toFixed(5)}, ${Number(t.startPoint.longitude).toFixed(5)}`,ec=`${Number(t.endPoint.latitude).toFixed(5)}, ${Number(t.endPoint.longitude).toFixed(5)}`;return `<div class="trip-card"><div class="trip-top"><div class="trip-name">Putovanje ${i+1}</div><div class="trip-time">${a} → ${b}</div></div><div class="trip-route">Početak: ${sc} &nbsp; • &nbsp; Kraj: ${ec}</div><div class="trip-metrics"><div class="trip-metric"><b>${dur}</b><span>TRAJANJE</span></div><div class="trip-metric"><b>${Number(t.distance||0).toLocaleString('hr-HR',{maximumFractionDigits:1})} km</b><span>UDALJENOST</span></div><div class="trip-metric"><b>${Number(t.maxSpeed||0).toLocaleString('hr-HR',{maximumFractionDigits:0})} km/h</b><span>MAKS. BRZINA</span></div><div class="trip-metric"><b>${Number(t.avg||0).toLocaleString('hr-HR',{maximumFractionDigits:1})} km/h</b><span>PROSJEČNA BRZINA</span></div></div></div>`}).join('')}
+async function reverseTripAddress(point){
+  if(!point || point.latitude==null || point.longitude==null) return 'Adresa nije dostupna';
+  const lat=Number(point.latitude), lon=Number(point.longitude);
+  if(!Number.isFinite(lat)||!Number.isFinite(lon)) return 'Adresa nije dostupna';
+  const key=lat.toFixed(5)+','+lon.toFixed(5);
+  if(addressCache.has(key)) return addressCache.get(key);
+  try{
+    const url='https://nominatim.openstreetmap.org/reverse?format=jsonv2'
+      +'&lat='+encodeURIComponent(lat)
+      +'&lon='+encodeURIComponent(lon)
+      +'&zoom=18&addressdetails=1&accept-language=hr';
+    const r=await fetch(url,{headers:{'Accept':'application/json'}});
+    if(!r.ok) throw new Error('Reverse geocoding nije uspio');
+    const geo=await r.json();
+    const a=geo.address||{};
+    const road=[a.road,a.house_number].filter(Boolean).join(' ');
+    const place=a.village||a.town||a.city||a.municipality||a.suburb||'';
+    const county=a.county||'';
+    const country=a.country||'';
+    const address=[road,place,county,country].filter(Boolean).join(', ') || geo.display_name || 'Adresa nije dostupna';
+    addressCache.set(key,address);
+    return address;
+  }catch(e){
+    return 'Adresa nije dostupna';
+  }
+}
+
+async function renderTrips(trips){
+  const box=$('tripList'),info=$('tripListInfo');
+  if(!box)return;
+  if(!trips.length){
+    box.innerHTML='<div class="trip-empty">Nije prepoznato nijedno putovanje. Potrebna su najmanje 2 GPS podatka tijekom vožnje.</div>';
+    if(info)info.textContent='0 putovanja';
+    return;
+  }
+  if(info)info.textContent=`${trips.length} ${trips.length===1?'putovanje':'putovanja'}`;
+  box.innerHTML=trips.map((t,i)=>{
+    const dur=formatDurationMinutes((t.endMs-t.startMs)/60000),a=historyLocalTime(t.startMs),b=historyLocalTime(t.endMs);
+    return `<div class="trip-card"><div class="trip-top"><div class="trip-name">🚌 Putovanje ${i+1}</div><div class="trip-time">${a} → ${b}</div></div><div class="trip-route" id="tripRoute${i}"><span style="color:#667085">Početak: Dohvaćam adresu… &nbsp; • &nbsp; Kraj: Dohvaćam adresu…</span></div><div class="trip-metrics"><div class="trip-metric"><b>${dur}</b><span>TRAJANJE</span></div><div class="trip-metric"><b>${Number(t.distance||0).toLocaleString('hr-HR',{maximumFractionDigits:1})} km</b><span>UDALJENOST</span></div><div class="trip-metric"><b>${Number(t.maxSpeed||0).toLocaleString('hr-HR',{maximumFractionDigits:0})} km/h</b><span>MAKS. BRZINA</span></div><div class="trip-metric"><b>${Number(t.avg||0).toLocaleString('hr-HR',{maximumFractionDigits:1})} km/h</b><span>PROSJEČNA BRZINA</span></div></div></div>`;
+  }).join('');
+
+  // Adrese dohvaćamo nakon što se kartice prikažu, tako učitavanje adrese
+  // nikada ne blokira prikaz samih putovanja.
+  for(let i=0;i<trips.length;i++){
+    const t=trips[i];
+    const [startAddress,endAddress]=await Promise.all([
+      reverseTripAddress(t.startPoint),
+      reverseTripAddress(t.endPoint)
+    ]);
+    const el=document.getElementById('tripRoute'+i);
+    if(el) el.innerHTML=`<b>Početak:</b> ${esc(startAddress)} &nbsp; • &nbsp; <b>Kraj:</b> ${esc(endAddress)}`;
+  }
+}
 function analyzeDrivingHistory(points){
  if(!points.length) return {driveMinutes:0,avg:0,max:0,start:null,end:null,stops:0,longestStop:0};
  const ordered=points.slice().sort((a,b)=>historyPointTime(a)-historyPointTime(b));
@@ -1048,7 +1100,7 @@ async function loadHistory(){
   const drivingStats=analyzeDrivingHistory(historyPoints);
   const historyStops=detectHistoryStops(historyPoints);
   renderHistoryStops(historyStops);
-  renderTrips(detectTrips(historyPoints));
+  await renderTrips(detectTrips(historyPoints));
   $('hsDistance').textContent=Number(historyCumulativeTotal||0).toLocaleString('hr-HR',{maximumFractionDigits:2})+' km';
   $('hsDriveTime').textContent=formatDurationMinutes(drivingStats.driveMinutes);
   $('hsAvg').textContent=Number(drivingStats.avg||0).toLocaleString('hr-HR',{maximumFractionDigits:1})+' km/h';
