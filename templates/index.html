@@ -325,6 +325,7 @@ async function vehicleOperationalStatus(d){
 function statusBadgeHtml(s){
   if(s.key==='moving') return '<span class="badge online">U VOŽNJI</span>';
   if(s.key==='parked') return '<span class="badge" style="background:#fff5dc;color:#9a6a00">PARKIRAN</span>';
+  if(s.key==='stopped') return '<span class="badge" style="background:#f3f4f6;color:#555">ZAUSTAVLJEN</span>';
   return '<span class="badge offline">OFFLINE</span>';
 }
 async function refreshParkingStatuses(){
@@ -383,8 +384,9 @@ function detailForm(d){
 
 function renderVehicleDetails(d, editMode=false){
  $('detailTitle').textContent=label(d);
- const gpsStatus=d?.status || (isOnline(d)?'ONLINE':'OFFLINE');
- const statusColor=isOnline(d)?'#16834b':'#c73535';
+ const detailStatus = statusForList(d);
+ const gpsStatus = d?.status || detailStatus.label;
+ const statusColor = detailStatus.key==='moving' ? '#16834b' : (detailStatus.key==='parked' ? '#9a6a00' : (detailStatus.key==='stopped' ? '#555' : '#c73535'));
 
  $('detailBody').innerHTML=`
    <div class="detail-section">Trenutni GPS podaci</div>
@@ -505,7 +507,7 @@ function statusForList(d){
   if(!on) return {key:'offline',label:'OFFLINE',parkedMin:0};
   return Number(d.speed_kmh||0)>1
     ? {key:'moving',label:'U VOŽNJI',parkedMin:0}
-    : {key:'stopped',label:'ZAUSTAVLJEN',parkedMin:0};
+    : {key:'parked',label:'PARKIRAN',parkedMin:0};
 }
 function statusRank(s){
   if(s.key==='moving') return 0;
