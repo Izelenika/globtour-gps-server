@@ -568,7 +568,14 @@ function updateHistoryReplay(minute){
    bindHistoryPlayedLineClick();
  }else{
    historyPlayedLine.setLatLngs(latlngs);
-   if(historyPlayedHitLine) historyPlayedHitLine.setLatLngs(latlngs);
+   if(!historyPlayedHitLine){
+     historyPlayedHitLine=L.polyline(latlngs,{weight:24,opacity:0,interactive:true}).addTo(map);
+   }else{
+     historyPlayedHitLine.setLatLngs(latlngs);
+   }
+   bindHistoryPlayedLineClick();
+   historyPlayedHitLine.bringToFront();
+   historyPlayedLine.bringToFront();
  }
 
  if(!historyReplayMarker){
@@ -822,7 +829,7 @@ async function loadHistory(){
   $('historySlider').disabled=false; $('historySlider').min=0; $('historySlider').max=Math.max(1,Math.ceil((historyEndMs-historyStartMs)/60000)); $('historySlider').value=0;
   updateHistoryReplay(0);
   map.invalidateSize({animate:false});
-  map.fitBounds(historyFullLine.getBounds(),{paddingTopLeft:[35,35],paddingBottomRight:[425,35]});
+  // Ne zumiraj na cijelu trasu. Replay sam pozicionira autobus i drži ga u vidljivom dijelu karte.
   updateHistoryReplay(0);
   $('historyMsg').textContent=`Trasa učitana: ${historyPoints.length} GPS točaka. Povucite klizač ili pokrenite Replay.`;
  }catch(e){$('historyMsg').textContent='Greška pri učitavanju povijesti.';}
@@ -832,6 +839,30 @@ $('sortVehicles').addEventListener('change',()=>renderList(lastData));
 $('fitBtn').onclick=()=>{const pts=Object.values(markers).map(m=>m.getLatLng());if(pts.length)map.fitBounds(L.latLngBounds(pts),{padding:[40,40]});};
 $('trackBtn').onclick=showHistory; $('historyShow').onclick=loadHistory; $('historyClose').onclick=closeHistory; $('historyBackdrop').onclick=closeHistory; $('historyPlay').onclick=startHistoryReplay; $('historyPause').onclick=stopHistoryReplay; $('historySlider').oninput=e=>updateHistoryReplay(e.target.value); document.querySelectorAll('[data-speed]').forEach(b=>b.onclick=()=>{historySpeed=Number(b.dataset.speed)||1;document.querySelectorAll('[data-speed]').forEach(x=>x.classList.remove('active'));b.classList.add('active');if(historyReplayTimer)startHistoryReplay();});
 $('closeDetail').onclick=()=>{$('detail').classList.remove('show');selected=null;document.querySelectorAll('.vehicle').forEach(x=>x.classList.remove('active'));};
+
+// Rezervni klik na kartu: ako klikneš blizu žute povijesne trase, pronađi najbližu
+// već prijeđenu GPS točku i prikaži njezino vrijeme. Ovo radi čak i ako Leaflet
+// ne uhvati klik direktno na SVG liniji.
+map.on('click',e=>{
+  if(!historyViewing || !historyPoints.length)return;
+  const target=historyStartMs+historyReplayMinute*60000;
+  const passedIdx=nearestHistoryIndex(target);
+  if(passedIdx<0)return;
+  const clickPt=map.latLngToContainerPoint(e.latlng);
+  let bestIdx=-1,bestPx=Infinity;
+  for(let i=0;i<=passedIdx;i++){
+    const p=historyPoints[i];
+    const pt=map.latLngToContainerPoint([Number(p.latitude),Number(p.longitude)]);
+    const dx=pt.x-clickPt.x,dy=pt.y-clickPt.y;
+    const d=Math.hypot(dx,dy);
+    if(d<bestPx){bestPx=d;bestIdx=i;}
+  }
+  if(bestIdx>=0 && bestPx<=32){
+    L.DomEvent.stopPropagation(e);
+    const p=historyPoints[bestIdx];
+    showHistoryPointPopup([Number(p.latitude),Number(p.longitude)]);
+  }
+});
 load();
 // Redovito osvježavanje: kada uređaj pošalje novi paket, /api/devices dobije novi last_seen,
 // a renderList ponovno sortira popis pa vozilo s najnovijim javljanjem ide na vrh.
