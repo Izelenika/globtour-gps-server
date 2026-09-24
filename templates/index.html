@@ -622,7 +622,7 @@ async function loadHistory(){
   $('historySlider').disabled=false; $('historySlider').min=0; $('historySlider').max=Math.max(1,Math.ceil((historyEndMs-historyStartMs)/60000)); $('historySlider').value=0;
   updateHistoryReplay(0);
   map.invalidateSize({animate:false});
-  map.fitBounds(historyFullLine.getBounds(),{paddingTopLeft:[35,35],paddingBottomRight:[425,35]});
+  map.fitBounds(historyFullLine.getBounds(),{paddingTopLeft:[35,35],paddingBottomRight:[35,35],maxZoom:14});
   updateHistoryReplay(0);
   $('historyMsg').textContent=`Trasa učitana: ${historyPoints.length} GPS točaka. Povucite klizač ili pokrenite Replay.`;
  }catch(e){$('historyMsg').textContent='Greška pri učitavanju povijesti.';}
