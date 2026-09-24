@@ -156,6 +156,7 @@ body{overflow:hidden}
 .vehicle-arrow-wrap{width:34px;height:34px;position:relative;display:flex;align-items:center;justify-content:center;transform-origin:50% 50%;filter:drop-shadow(0 1px 2px rgba(0,0,0,.45));}
 .vehicle-arrow{position:absolute;top:2px;left:50%;transform:translateX(-50%);width:0;height:0;border-left:8px solid transparent;border-right:8px solid transparent;border-bottom:23px solid #159447;}
 .vehicle-arrow-dot{position:absolute;width:9px;height:9px;border-radius:50%;left:50%;top:15px;transform:translate(-50%,-50%);border:2px solid #fff;box-sizing:border-box;}
+.history-stop-label{background:#fff7ed;border:2px solid #f59e0b;color:#92400e;font-weight:800;border-radius:10px;padding:2px 6px;box-shadow:0 2px 6px #0002}.history-stop-label:before{border-top-color:#f59e0b !important;}
 </style>
 </head>
 <body>
@@ -547,6 +548,7 @@ function clearHistoryVisuals(){
  if(historyPlayedLine){historyPlayedLine.remove();historyPlayedLine=null;}
  if(historyPlayedHitLine){historyPlayedHitLine.remove();historyPlayedHitLine=null;}
  if(historyReplayMarker){historyReplayMarker.remove();historyReplayMarker=null;}
+ historyStopMarkers.forEach(m=>{try{m.remove();}catch(e){}}); historyStopMarkers=[];
  historyRoadSegments=[]; historyRoadReady=false;
 }
 function nearestHistoryIndex(targetMs){
@@ -564,6 +566,7 @@ let historyCumulativeTotal=0;
 let historyCumulativeTotalBeforeDay=0;
 let historyViewing=false;
 let historyVehicleImei=null;
+let historyStopMarkers=[];
 
 function getInitialKm(imei){
  const v=localStorage.getItem(KM_KEY_PREFIX+imei);
@@ -777,6 +780,48 @@ function formatDurationMinutes(mins){
  if(h>0) return `${h} h ${String(mm).padStart(2,'0')} min`;
  return `${mm} min`;
 }
+function detectHistoryStops(points){
+ const ordered=points.slice().sort((a,b)=>historyPointTime(a)-historyPointTime(b));
+ const stops=[]; const MIN_STOP_MS=2*60*1000; const MAX_GAP_MS=20*60*1000;
+ let stopStart=null, lastStopped=null;
+ const isStopped=p=>Number(p.speed_kmh||0)<=1;
+ for(let i=0;i<ordered.length;i++){
+   const p=ordered[i], t=historyPointTime(p);
+   if(i>0 && t-historyPointTime(ordered[i-1])>MAX_GAP_MS){
+     if(stopStart!==null && lastStopped){
+       const end=historyPointTime(lastStopped);
+       if(end-stopStart>=MIN_STOP_MS) stops.push({startMs:stopStart,endMs:end,point:lastStopped});
+     }
+     stopStart=null; lastStopped=null;
+   }
+   if(isStopped(p)){
+     if(stopStart===null) stopStart=t;
+     lastStopped=p;
+   }else if(stopStart!==null){
+     if(t-stopStart>=MIN_STOP_MS) stops.push({startMs:stopStart,endMs:t,point:lastStopped||p});
+     stopStart=null; lastStopped=null;
+   }
+ }
+ if(stopStart!==null && lastStopped){
+   const end=historyPointTime(lastStopped);
+   if(end-stopStart>=MIN_STOP_MS) stops.push({startMs:stopStart,endMs:end,point:lastStopped});
+ }
+ return stops;
+}
+function renderHistoryStops(stops){
+ historyStopMarkers.forEach(m=>{try{m.remove();}catch(e){}}); historyStopMarkers=[];
+ stops.forEach((st,i)=>{
+   const p=st.point; if(!p||p.latitude==null||p.longitude==null)return;
+   const duration=formatDurationMinutes((st.endMs-st.startMs)/60000);
+   const circle=L.circleMarker([Number(p.latitude),Number(p.longitude)],{
+     radius:8,weight:3,color:'#d97706',fillColor:'#fbbf24',fillOpacity:.95,interactive:true,zIndexOffset:2500
+   }).addTo(map);
+   circle.bindTooltip(`⏸ ${duration}`,{permanent:true,direction:'top',offset:[0,-8],className:'history-stop-label'});
+   circle.bindPopup(`<div style="min-width:190px;line-height:1.55"><b style="font-size:15px">⏸ Zaustavljanje ${i+1}</b><br><b>Početak:</b> ${historyLocalTime(st.startMs)}<br><b>Kraj:</b> ${historyLocalTime(st.endMs)}<br><b>Trajanje:</b> ${duration}<br><span style="color:#667085">Lokacija: ${Number(p.latitude).toFixed(6)}, ${Number(p.longitude).toFixed(6)}</span></div>`);
+   circle.on('click',e=>{L.DomEvent.stopPropagation(e);circle.openPopup();});
+   historyStopMarkers.push(circle);
+ });
+}
 function analyzeDrivingHistory(points){
  if(!points.length) return {driveMinutes:0,avg:0,max:0,start:null,end:null,stops:0,longestStop:0};
  const ordered=points.slice().sort((a,b)=>historyPointTime(a)-historyPointTime(b));
@@ -935,6 +980,28 @@ function roadLatLngsUntilIndex(idx){
   return out.length>=2 ? out : historyPoints.slice(0,idx+1).map(x=>[x.latitude,x.longitude]);
 }
 
+function cleanHistoryRoutePoints(points){
+  if(points.length<2) return points.slice();
+  const out=[points[0]];
+  for(let i=1;i<points.length;i++){
+    const prev=out[out.length-1], cur=points[i];
+    const dt=(historyPointTime(cur)-historyPointTime(prev))/1000;
+    const dist=haversineKm(prev,cur);
+    const calcSpeed=dt>0 ? dist/(dt/3600) : Infinity;
+    // Izbaci očite GPS skokove. Za lokalnu vožnju ne prihvaćamo segment
+    // koji bi zahtijevao nerealnu brzinu ili ogroman skok koordinata.
+    if(dt>0 && dt<=20*60 && dist<=30 && calcSpeed<=160){
+      out.push(cur);
+    }
+  }
+  return out;
+}
+function fitHistoryRoute(points){
+  if(!points.length) return;
+  const bounds=L.latLngBounds(points.map(p=>[Number(p.latitude),Number(p.longitude)]));
+  if(!bounds.isValid()) return;
+  map.fitBounds(bounds,{paddingTopLeft:[390,30],paddingBottomRight:[35,35],maxZoom:16,animate:false});
+}
 async function loadHistory(){
  const historyImei=historyVehicleImei || selected;
  if(!historyImei)return;
@@ -946,19 +1013,24 @@ async function loadHistory(){
   const r=await fetch('/api/history/'+encodeURIComponent(historyImei)+'?from='+encodeURIComponent(from)+'&to='+encodeURIComponent(to)+'&limit=20000',{cache:'no-store'});
   if(!r.ok)throw new Error('HTTP '+r.status);
   const data=await r.json(); const sm=data.summary||{};
-  historyPoints=(data.points||[]).filter(p=>p.latitude!=null&&p.longitude!=null).sort((a,b)=>historyPointTime(a)-historyPointTime(b));
+  const rawHistoryPoints=(data.points||[]).filter(p=>p.latitude!=null&&p.longitude!=null).sort((a,b)=>historyPointTime(a)-historyPointTime(b));
+  historyPoints=cleanHistoryRoutePoints(rawHistoryPoints);
   historyCumulativePoints=buildCumulative(historyPoints);
   historyCumulativeTotal=historyCumulativePoints.length?historyCumulativePoints.at(-1):0;
 
   const drivingStats=analyzeDrivingHistory(historyPoints);
-  $('hsDistance').textContent=Number(sm.distance_km||historyCumulativeTotal||0).toLocaleString('hr-HR',{maximumFractionDigits:2})+' km';
+  const historyStops=detectHistoryStops(historyPoints);
+  renderHistoryStops(historyStops);
+  // Ne koristimo više serverov distance_km jer je u starim zapisima mogao
+  // sadržavati GPS skokove. Računamo udaljenost samo iz provjerenih točaka.
+  $('hsDistance').textContent=Number(historyCumulativeTotal||0).toLocaleString('hr-HR',{maximumFractionDigits:2})+' km';
   $('hsDriveTime').textContent=formatDurationMinutes(drivingStats.driveMinutes);
   $('hsAvg').textContent=Number(drivingStats.avg||0).toLocaleString('hr-HR',{maximumFractionDigits:1})+' km/h';
   $('hsMax').textContent=Number(Math.max(sm.max_speed_kmh||0,drivingStats.max||0)).toLocaleString('hr-HR',{maximumFractionDigits:1})+' km/h';
   $('hsStart').textContent=drivingStats.start===null?'-':historyLocalTime(drivingStats.start);
   $('hsEnd').textContent=drivingStats.end===null?'-':historyLocalTime(drivingStats.end);
-  $('hsStops').textContent=drivingStats.stops;
-  $('hsLongestStop').textContent=formatDurationMinutes(drivingStats.longestStop);
+  $('hsStops').textContent=historyStops.length;
+  $('hsLongestStop').textContent=formatDurationMinutes(historyStops.reduce((m,st)=>Math.max(m,(st.endMs-st.startMs)/60000),0));
   $('hsAtMoment').textContent='0,0 km';
 
   const initial=getInitialKm(historyImei);
@@ -1005,7 +1077,10 @@ async function loadHistory(){
   const firstPoint=historyPoints[0];
   map.setView([firstPoint.latitude,firstPoint.longitude],14,{animate:false});
   updateHistoryReplay(0);
-  $('historyMsg').textContent=`Trasa učitana: ${historyPoints.length} GPS točaka. Učitavanje cestovne trase...`;
+  // Nakon što je povijest učitana, odmah prikaži cijelu stvarnu trasu.
+  fitHistoryRoute(historyPoints);
+  updateHistoryReplay(0);
+  $('historyMsg').textContent=`Trasa učitana: ${historyPoints.length} provjerenih GPS točaka. Učitavanje cestovne trase...`;
 
   // Routing je dodatna funkcija. Ako OSRM ne odgovori, ostaje GPS trasa.
   buildRoadSegments(historyPoints).then(segments=>{
@@ -1020,10 +1095,10 @@ async function loadHistory(){
       for(const seg of segments) for(const q of seg) add(q);
       if(historyFullLine) historyFullLine.setLatLngs(full);
       updateHistoryReplay(historyReplayMinute);
-      $('historyMsg').textContent=`Trasa učitana: ${historyPoints.length} GPS točaka. Ruta prati cestu između GPS javljanja.`;
+      $('historyMsg').textContent=`Trasa učitana: ${historyPoints.length} provjerenih GPS točaka. Ruta prati cestu između GPS javljanja.`;
     }catch(e){
       // GPS trasa ostaje aktivna ako cestovna obrada zakaže.
-      $('historyMsg').textContent=`Trasa učitana: ${historyPoints.length} GPS točaka.`;
+      $('historyMsg').textContent=`Trasa učitana: ${historyPoints.length} provjerenih GPS točaka.`;
     }
   }).catch(()=>{
     $('historyMsg').textContent=`Trasa učitana: ${historyPoints.length} GPS točaka.`;
@@ -1044,6 +1119,7 @@ function clearHistoryVisuals(){
  if(historyPlayedLine){historyPlayedLine.remove();historyPlayedLine=null;}
  if(historyPlayedHitLine){historyPlayedHitLine.remove();historyPlayedHitLine=null;}
  if(historyReplayMarker){historyReplayMarker.remove();historyReplayMarker=null;}
+ historyStopMarkers.forEach(m=>{try{m.remove();}catch(e){}}); historyStopMarkers=[];
 }
 function nearestHistoryIndex(targetMs){
  if(!historyPoints.length)return -1;
