@@ -502,7 +502,7 @@ async function loadVehicleCumulativeKm(imei,toDate){
 }
 
 
-function showHistoryPointPopup(latlng){
+async function showHistoryPointPopup(latlng){
  if(!historyPoints.length)return;
  let bestIdx=0, bestDist=Infinity;
  for(let i=0;i<historyPoints.length;i++){
@@ -515,24 +515,49 @@ function showHistoryPointPopup(latlng){
  const passedIdx=nearestHistoryIndex(target);
  if(passedIdx>=0) bestIdx=Math.min(bestIdx,passedIdx);
  const p=historyPoints[bestIdx];
+ const lat=Number(p.latitude), lon=Number(p.longitude);
  const driven=cumulativeAtPoint(bestIdx);
  const initial=getInitialKm(selected);
  const totalAtMoment=initial===null?null:initial+historyCumulativeTotalBeforeDay+driven;
  const speed=Number(p.speed_kmh||0);
  const angle=Number(p.angle||0);
+ const popupId='hist-popup-'+Date.now();
  const popupHtml=`
-   <div style="min-width:190px">
+   <div id="${popupId}" style="min-width:230px;line-height:1.55">
      <b style="font-size:15px">📍 Povijesna pozicija</b><br>
      <span><b>Vrijeme:</b> ${historyLocalTime(historyPointTime(p))}</span><br>
      <span><b>Brzina:</b> ${speed.toLocaleString('hr-HR',{maximumFractionDigits:1})} km/h</span><br>
      <span><b>Smjer:</b> ${angle}°</span><br>
      <span><b>Prijeđeno do tada:</b> ${fmtKm(driven)}</span><br>
      <span><b>Ukupna km vozila:</b> ${totalAtMoment===null?'-':fmtKm(totalAtMoment)}</span>
+     <div style="margin-top:7px;padding-top:7px;border-top:1px solid #ddd">
+       <b>📌 Adresa</b><br><span id="${popupId}-address" style="color:#667085">Dohvaćam adresu…</span>
+     </div>
    </div>`;
- L.popup({closeButton:true,autoPan:true,maxWidth:260})
-   .setLatLng([Number(p.latitude),Number(p.longitude)])
+ const popup=L.popup({closeButton:true,autoPan:true,maxWidth:320})
+   .setLatLng([lat,lon])
    .setContent(popupHtml)
    .openOn(map);
+
+ // Obrnuto geokodiranje preko Nominatim/OSM.
+ // Ako usluga nije dostupna, GPS koordinate i dalje ostaju prikazane na karti.
+ try{
+   const url='https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat='+encodeURIComponent(lat)+'&lon='+encodeURIComponent(lon)+'&zoom=18&addressdetails=1&accept-language=hr';
+   const r=await fetch(url,{headers:{'Accept':'application/json'}});
+   if(!r.ok)throw new Error('Reverse geocoding nije uspio');
+   const geo=await r.json();
+   const addr=geo.display_name || [
+     geo.address?.road,
+     geo.address?.house_number,
+     geo.address?.village || geo.address?.town || geo.address?.city,
+     geo.address?.country
+   ].filter(Boolean).join(', ');
+   const el=document.getElementById(popupId+'-address');
+   if(el)el.textContent=addr || 'Adresa nije dostupna';
+ }catch(err){
+   const el=document.getElementById(popupId+'-address');
+   if(el)el.innerHTML='Adresa nije dostupna<br><span style="font-size:10px">'+lat.toFixed(6)+', '+lon.toFixed(6)+'</span>';
+ }
 }
 function bindHistoryPlayedLineClick(){
  const bind=(line)=>{
