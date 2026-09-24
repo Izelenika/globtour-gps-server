@@ -137,32 +137,99 @@ async function refreshParkingStatuses(){
 }
 
 function makeIcon(online,angle){return L.divIcon({className:'',html:`<div style="transform:rotate(${Number(angle||0)}deg);font-size:27px;filter:drop-shadow(0 2px 2px #0005);">${online?'🚌':'⚪'}</div>`,iconSize:[32,32],iconAnchor:[16,16],popupAnchor:[0,-15]});}
-function detailForm(d){return `<div class="form"><div class="detail-section">Podaci vozila</div>
-<label>Registracija</label><input id="f_registration" value="${esc(d.registration||'')}">
-<label>Marka / model</label><input id="f_make_model" value="${esc(d.make_model||'')}">
-<label>Tip vozila</label><input id="f_vehicle_type" value="${esc(d.vehicle_type||'')}">
-<label>Godina proizvodnje</label><input id="f_production_year" inputmode="numeric" value="${esc(d.production_year||'')}">
-<label>IMEI</label><input value="${esc(d.imei)}" disabled>
-<label>Napomena</label><textarea id="f_note">${esc(d.note||'')}</textarea>
-<div class="form-actions"><button class="btn primary" id="saveVehicle">Spremi podatke</button><button class="btn" id="vehicleHistory">Povijest trase</button></div><div class="save-msg" id="saveMsg"></div></div>`}
-function showDetails(d){selected=d.imei; $('detail').classList.add('show'); $('detailTitle').textContent=label(d); $('detailBody').innerHTML=`
-  <div class="detail-section">Trenutni GPS podaci</div>
-  <div class="detail-row"><span>Status</span><strong style="color:${isOnline(d)?'#16834b':'#c73535'}">${isOnline(d)?'ONLINE':'OFFLINE'}</strong></div>
-  <div class="detail-row"><span>Brzina</span><b>${d.speed_kmh??'-'} km/h</b></div>
-  <div class="detail-row"><span>Smjer</span><b>${d.angle??'-'}°</b></div>
-  <div class="detail-row"><span>GPS</span><b>${d.latitude?.toFixed?.(6)??'-'}, ${d.longitude?.toFixed?.(6)??'-'}</b></div>
-  <div class="detail-row"><span>Sateliti</span><b>${d.satellites??'-'}</b></div>
-  <div class="detail-row"><span>Zadnji podatak</span><b>${fmtTime(d.ts_utc)}</b></div>
-  <div class="detail-row"><span>Napajanje</span><b>${d.external_voltage!=null?Number(d.external_voltage).toFixed(2)+' V':'-'}</b></div>
-  <div class="detail-row"><span>Odometer</span><b>${d.total_odometer!=null?Number(d.total_odometer).toLocaleString('hr-HR')+' km':'-'}</b></div>
-  ${detailForm(d)}`;
-  $('saveVehicle').onclick=()=>saveVehicle(d.imei); $('vehicleHistory').onclick=()=>{showHistory();};
-  document.querySelectorAll('.vehicle').forEach(x=>x.classList.toggle('active',x.dataset.id===selected));
+function vehicleInfoView(d){
+ const optional=[
+   ['Registracija',d.registration],
+   ['Marka / model',d.make_model],
+   ['Tip vozila',d.vehicle_type],
+   ['Tip šasije',d.chassis_type],
+   ['Godina proizvodnje',d.production_year],
+   ['IMEI',d.imei],
+   ['Napomena',d.note]
+ ];
+ return `<div class="detail-section">Podaci vozila</div>
+   ${optional.filter(([k,v])=>k==='IMEI'||v!==undefined&&v!==null&&String(v).trim()!=='')
+     .map(([k,v])=>`<div class="detail-row"><span>${k}</span><b>${esc(v||'-')}</b></div>`).join('')}
+   <div class="form-actions">
+     <button class="btn" id="vehicleHistory">🗺 Povijest trase</button>
+     <button class="btn primary" id="editVehicle">✏️ Uredi podatke</button>
+   </div>`;
 }
+
+function detailForm(d){
+ return `<div class="form">
+   <div class="detail-section">Uređivanje podataka vozila</div>
+   <label>Registracija</label><input id="f_registration" value="${esc(d.registration||'')}">
+   <label>Marka / model</label><input id="f_make_model" value="${esc(d.make_model||'')}">
+   <label>Tip vozila</label><input id="f_vehicle_type" value="${esc(d.vehicle_type||'')}">
+   <label>Godina proizvodnje</label><input id="f_production_year" inputmode="numeric" value="${esc(d.production_year||'')}">
+   <label>IMEI</label><input value="${esc(d.imei)}" disabled>
+   <label>Napomena</label><textarea id="f_note">${esc(d.note||'')}</textarea>
+   <div class="form-actions">
+     <button class="btn" id="cancelVehicleEdit">Odustani</button>
+     <button class="btn primary" id="saveVehicle">Spremi promjene</button>
+   </div>
+   <div class="save-msg" id="saveMsg"></div>
+ </div>`;
+}
+
+function renderVehicleDetails(d, editMode=false){
+ $('detailTitle').textContent=label(d);
+ const gpsStatus=isOnline(d)?'ONLINE':'OFFLINE';
+ const statusColor=isOnline(d)?'#16834b':'#c73535';
+
+ $('detailBody').innerHTML=`
+   <div class="detail-section">Trenutni GPS podaci</div>
+   <div class="detail-row"><span>Status</span><strong style="color:${statusColor}">${gpsStatus}</strong></div>
+   <div class="detail-row"><span>Brzina</span><b>${d.speed_kmh??'-'} km/h</b></div>
+   <div class="detail-row"><span>Smjer</span><b>${d.angle??'-'}°</b></div>
+   <div class="detail-row"><span>GPS</span><b>${d.latitude?.toFixed?.(6)??'-'}, ${d.longitude?.toFixed?.(6)??'-'}</b></div>
+   <div class="detail-row"><span>Sateliti</span><b>${d.satellites??'-'}</b></div>
+   <div class="detail-row"><span>Zadnji podatak</span><b>${fmtTime(d.ts_utc)}</b></div>
+   <div class="detail-row"><span>Napajanje</span><b>${d.external_voltage!=null?Number(d.external_voltage).toFixed(2)+' V':'-'}</b></div>
+   <div class="detail-row"><span>Odometer</span><b>${d.total_odometer!=null?Number(d.total_odometer).toLocaleString('hr-HR')+' km':'-'}</b></div>
+   ${editMode ? detailForm(d) : vehicleInfoView(d)}`;
+
+ if(editMode){
+   $('cancelVehicleEdit').onclick=()=>renderVehicleDetails(d,false);
+   $('saveVehicle').onclick=()=>saveVehicle(d.imei);
+ }else{
+   $('vehicleHistory').onclick=()=>showHistory();
+   $('editVehicle').onclick=()=>renderVehicleDetails(d,true);
+ }
+}
+
+function showDetails(d){
+ selected=d.imei;
+ $('detail').classList.add('show');
+ renderVehicleDetails(d,false);
+ document.querySelectorAll('.vehicle').forEach(x=>x.classList.toggle('active',x.dataset.id===selected));
+}
+
 async function saveVehicle(imei){
- const body={registration:$('f_registration').value.trim(),make_model:$('f_make_model').value.trim(),vehicle_type:$('f_vehicle_type').value.trim(),production_year:$('f_production_year').value.trim(),note:$('f_note').value.trim()};
- const msg=$('saveMsg'); msg.textContent='Spremanje...';
- try{const r=await fetch('/api/devices/'+encodeURIComponent(imei),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});if(!r.ok)throw new Error('Greška');msg.textContent='Podaci su spremljeni.';await load();if(dataById[imei])showDetails(dataById[imei]);}catch(e){msg.style.color='#c73535';msg.textContent='Spremanje nije uspjelo.';}
+ const body={
+   registration:$('f_registration').value.trim(),
+   make_model:$('f_make_model').value.trim(),
+   vehicle_type:$('f_vehicle_type').value.trim(),
+   production_year:$('f_production_year').value.trim(),
+   note:$('f_note').value.trim()
+ };
+ const msg=$('saveMsg');
+ msg.textContent='Spremanje...';
+ msg.style.color='var(--green)';
+ try{
+   const r=await fetch('/api/devices/'+encodeURIComponent(imei),{
+     method:'POST',
+     headers:{'Content-Type':'application/json'},
+     body:JSON.stringify(body)
+   });
+   if(!r.ok)throw new Error('Greška');
+   await load();
+   if(dataById[imei])renderVehicleDetails(dataById[imei],false);
+ }catch(e){
+   msg.style.color='#c73535';
+   msg.textContent='Spremanje nije uspjelo.';
+ }
 }
 function renderList(data){
  const q=$('search').value.trim().toLowerCase(); const filtered=data.filter(d=>(label(d)+' '+(d.make_model||'')+' '+(d.vehicle_type||'')+' '+(d.imei||'')).toLowerCase().includes(q));
