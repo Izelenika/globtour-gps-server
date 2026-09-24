@@ -276,13 +276,32 @@ function parseSeenMs(v){
  if(m){const local=new Date(`${m[1]}T${m[2]}:${m[3]}:${m[4]}`);return local.getTime();}
  return 0;
 }
+function effectiveSeenMs(d){
+ // /api/devices vraca last_seen (vrijeme kada je server primio paket)
+ // i ts_utc (vrijeme GPS zapisa). Za status koristimo zadnje javljanje,
+ // ali toleriramo slucaj kada server vrati vrijeme bez/sa pogresnim UTC pomakom.
+ const now=Date.now();
+ const candidates=[d.last_seen,d.ts_utc].filter(Boolean).map(parseSeenMs).filter(Number.isFinite);
+ if(!candidates.length) return 0;
+ let best=candidates[0];
+ let bestAbs=Math.abs(now-best);
+ for(const ms0 of candidates.slice(1)){const a=Math.abs(now-ms0);if(a<bestAbs){best=ms0;bestAbs=a;}}
+ // Ako je timestamp unaprijed tocno oko lokalnog UTC pomaka, normaliziraj ga.
+ // Ovo sprjecava da svjeze vozilo nakon refresha bude prikazano OFFLINE.
+ const age=now-best;
+ if(age < -15*60*1000 && age > -4*60*60*1000){
+   const corrected=best-2*60*60*1000;
+   const correctedAge=now-corrected;
+   if(correctedAge>=-5*60*1000 && correctedAge<10*60*1000) return corrected;
+ }
+ return best;
+}
 function isOnline(d){
- const ms=parseSeenMs(d.last_seen || d.ts_utc);
+ const ms=effectiveSeenMs(d);
  if(!ms) return false;
  const age=Date.now()-ms;
- // Malo veci tolerancijski prozor jer FMC150 moze slati zapis u paketima.
- // Nakon refresh-a status se racuna iz zadnjeg poznatog javljanja; nema cekanja na novi paket.
- return age>=-2*60*1000 && age<10*60*1000;
+ // Svjeze javljanje ostaje ONLINE i nakon refresh-a; ne ceka se novi paket.
+ return age>=-5*60*1000 && age<10*60*1000;
 }
 function label(d){return d.registration || 'Neregistrirano vozilo'}
 async function vehicleOperationalStatus(d){
@@ -477,11 +496,7 @@ function statusRank(s){
   if(s.key==='stopped' || s.key==='parked') return 1;
   return 2;
 }
-function lastSeenMs(d){
-  const v=d.last_seen || d.ts_utc;
-  const ms=v ? parseSeenMs(v) : 0;
-  return Number.isFinite(ms) ? ms : 0;
-}
+function lastSeenMs(d){ return effectiveSeenMs(d); }
 function renderList(data){
  const q=$('search').value.trim().toLowerCase();
  const filtered=data.filter(d=>(label(d)+' '+(d.make_model||'')+' '+(d.vehicle_type||'')+' '+(d.imei||'')).toLowerCase().includes(q));
