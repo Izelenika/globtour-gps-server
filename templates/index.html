@@ -472,13 +472,21 @@ function renderList(data){
   <div class="vgrid"><div class="metric"><b>${d.speed_kmh??'-'} km/h</b><span>BRZINA</span></div><div class="metric"><b>${d.angle??'-'}°</b><span>SMJER</span></div><div class="metric"><b>${d.satellites??'-'}</b><span>SATELITI</span></div></div>`;
    el.onclick=()=>{showDetails(d);if(d.latitude!=null&&d.longitude!=null){map.setView([d.latitude,d.longitude],15);markers[d.imei]?.openPopup();}}; box.appendChild(el);
    if(d.latitude!=null&&d.longitude!=null){
+     // Status mora biti izračunat PRIJE izrade ikone. Inače bi JS greška
+     // prekinula crtanje svih markera na karti.
+     const mapStatus = statusForList(d);
+
      // Dok gledamo povijest, sakrij trenutnu poziciju odabranog autobusa.
      if(historyViewing && d.imei===selected){
        if(markers[d.imei]){markers[d.imei].remove();delete markers[d.imei];}
      }else{
-       if(!markers[d.imei])markers[d.imei]=L.marker([d.latitude,d.longitude],{icon:makeIcon(on,d.angle,mapStatus.key),zIndexOffset:500}).addTo(map);
-       else markers[d.imei].setLatLng([d.latitude,d.longitude]).setIcon(makeIcon(on,d.angle,mapStatus.key));
-       const mapStatus = statusForList(d);
+       // I OFFLINE vozilo ostaje na karti na svojoj ZADNJOJ poznatoj GPS poziciji.
+       // Samo se ikona/oznaka oboji crveno i pokazuje OFFLINE.
+       if(!markers[d.imei]){
+         markers[d.imei]=L.marker([d.latitude,d.longitude],{icon:makeIcon(on,d.angle,mapStatus.key),zIndexOffset:500}).addTo(map);
+       }else{
+         markers[d.imei].setLatLng([d.latitude,d.longitude]).setIcon(makeIcon(on,d.angle,mapStatus.key));
+       }
        const labelClass = mapStatus.key==='moving' ? 'status-moving' : (mapStatus.key==='offline' ? 'status-offline' : 'status-parked');
        const regLabel = esc(label(d));
        markers[d.imei].unbindTooltip().bindTooltip(regLabel,{
@@ -488,7 +496,7 @@ function renderList(data){
          className:'vehicle-map-label '+labelClass,
          opacity:1
        });
-       markers[d.imei].bindPopup(`<b>${regLabel}</b><br>${esc(d.make_model||'')}<br>${on?'ONLINE':'OFFLINE'}<br>Brzina: ${d.speed_kmh??'-'} km/h<br>Vrijeme: ${fmtTime(d.ts_utc)}`);
+       markers[d.imei].bindPopup(`<b>${regLabel}</b><br>${esc(d.make_model||'')}<br>${on?'ONLINE':'OFFLINE'}${!on?' — zadnja poznata pozicija':''}<br>Brzina: ${d.speed_kmh??'-'} km/h<br>Vrijeme: ${fmtTime(d.ts_utc)}`);
      }
    }
  });
