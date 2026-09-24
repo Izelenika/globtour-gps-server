@@ -45,6 +45,10 @@ def init_db():
     CREATE TABLE IF NOT EXISTS devices (
         imei TEXT PRIMARY KEY,
         registration TEXT,
+        make_model TEXT,
+        vehicle_type TEXT,
+        production_year INTEGER,
+        note TEXT,
         name TEXT,
         created_at TEXT NOT NULL,
         last_seen TEXT
@@ -72,6 +76,19 @@ def init_db():
     CREATE INDEX IF NOT EXISTS idx_positions_imei_ts
     ON positions(imei, ts_utc);
     """)
+
+    # Safe migration for databases created by earlier versions.
+    cols = {row[1] for row in con.execute("PRAGMA table_info(devices)").fetchall()}
+    migrations = {
+        "make_model": "ALTER TABLE devices ADD COLUMN make_model TEXT",
+        "vehicle_type": "ALTER TABLE devices ADD COLUMN vehicle_type TEXT",
+        "production_year": "ALTER TABLE devices ADD COLUMN production_year INTEGER",
+        "note": "ALTER TABLE devices ADD COLUMN note TEXT",
+    }
+    for col, sql in migrations.items():
+        if col not in cols:
+            con.execute(sql)
+
     con.commit()
     con.close()
 
@@ -345,7 +362,8 @@ async def dashboard(request: Request):
 async def devices():
     con = db()
     rows = con.execute("""
-        SELECT d.imei, d.registration, d.name, d.last_seen,
+        SELECT d.imei, d.registration, d.make_model, d.vehicle_type,
+               d.production_year, d.note, d.last_seen,
                p.ts_utc, p.latitude, p.longitude, p.speed_kmh,
                p.angle, p.satellites, p.ignition, p.movement,
                p.gsm_signal, p.external_voltage, p.total_odometer
@@ -378,11 +396,34 @@ async def history(imei: str, limit: int = 500):
 @app.post("/api/devices/{imei}")
 async def update_device(imei: str, request: Request):
     body = await request.json()
+    registration = str(body.get("registration", "") or "").strip()
+    make_model = str(body.get("make_model", "") or "").strip()
+    vehicle_type = str(body.get("vehicle_type", "") or "").strip()
+    note = str(body.get("note", "") or "").strip()
+
+    year_raw = body.get("production_year")
+    try:
+        production_year = int(year_raw) if year_raw not in (None, "") else None
+    except (TypeError, ValueError):
+        production_year = None
+
     con = db()
-    con.execute(
-        "UPDATE devices SET registration=?, name=? WHERE imei=?",
-        (body.get("registration", ""), body.get("name", ""), imei),
-    )
+    exists = con.execute("SELECT 1 FROM devices WHERE imei=?", (imei,)).fetchone()
+    if exists:
+        con.execute(
+            """UPDATE devices
+               SET registration=?, make_model=?, vehicle_type=?,
+                   production_year=?, note=?
+               WHERE imei=?""",
+            (registration, make_model, vehicle_type, production_year, note, imei),
+        )
+    else:
+        con.execute(
+            """INSERT INTO devices
+               (imei, registration, make_model, vehicle_type, production_year, note, created_at, last_seen)
+               VALUES (?, ?, ?, ?, ?, ?, ?, NULL)""",
+            (imei, registration, make_model, vehicle_type, production_year, note, now_utc()),
+        )
     con.commit()
     con.close()
     return {"ok": True}
