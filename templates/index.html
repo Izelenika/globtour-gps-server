@@ -144,7 +144,7 @@ function detailForm(d){return `<div class="form"><div class="detail-section">Pod
 <label>Godina proizvodnje</label><input id="f_production_year" inputmode="numeric" value="${esc(d.production_year||'')}">
 <label>IMEI</label><input value="${esc(d.imei)}" disabled>
 <label>Napomena</label><textarea id="f_note">${esc(d.note||'')}</textarea>
-<div class="form-actions"><button class="btn primary" id="saveVehicle">Spremi podatke</button></div><div class="save-msg" id="saveMsg"></div></div>`}
+<div class="form-actions"><button class="btn primary" id="saveVehicle">Spremi podatke</button><button class="btn" id="vehicleHistory">Povijest trase</button></div><div class="save-msg" id="saveMsg"></div></div>`}
 function showDetails(d){selected=d.imei; $('detail').classList.add('show'); $('detailTitle').textContent=label(d); $('detailBody').innerHTML=`
   <div class="detail-section">Trenutni GPS podaci</div>
   <div class="detail-row"><span>Status</span><strong style="color:${isOnline(d)?'#16834b':'#c73535'}">${isOnline(d)?'ONLINE':'OFFLINE'}</strong></div>
@@ -156,7 +156,7 @@ function showDetails(d){selected=d.imei; $('detail').classList.add('show'); $('d
   <div class="detail-row"><span>Napajanje</span><b>${d.external_voltage!=null?Number(d.external_voltage).toFixed(2)+' V':'-'}</b></div>
   <div class="detail-row"><span>Odometer</span><b>${d.total_odometer!=null?Number(d.total_odometer).toLocaleString('hr-HR')+' km':'-'}</b></div>
   ${detailForm(d)}`;
-  $('saveVehicle').onclick=()=>saveVehicle(d.imei);
+  $('saveVehicle').onclick=()=>saveVehicle(d.imei); $('vehicleHistory').onclick=()=>{showHistory();};
   document.querySelectorAll('.vehicle').forEach(x=>x.classList.toggle('active',x.dataset.id===selected));
 }
 async function saveVehicle(imei){
