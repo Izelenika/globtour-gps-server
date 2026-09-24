@@ -527,24 +527,7 @@ async function loadHistory(){
   $('historyMsg').textContent=`Trasa učitana: ${historyPoints.length} GPS točaka. Povucite klizač ili pokrenite Replay.`;
  }catch(e){$('historyMsg').textContent='Greška pri učitavanju povijesti.';}
 }
-function renderList(data){
- const q=$('search').value.trim().toLowerCase(); const filtered=data.filter(d=>(label(d)+' '+(d.make_model||'')+' '+(d.vehicle_type||'')+' '+(d.imei||'')).toLowerCase().includes(q));
- $('total').textContent=data.length; $('online').textContent=data.filter(isOnline).length; $('moving').textContent=data.filter(d=>Number(d.speed_kmh||0)>1).length; $('updated').textContent='Ažurirano '+new Date().toLocaleTimeString('hr-HR',{hour12:false});
- const box=$('devices'); if(!filtered.length){box.innerHTML='<div class="empty">Nema vozila za prikaz.</div>';return;} box.innerHTML='';
- filtered.forEach(d=>{dataById[d.imei]=d; const on=isOnline(d); const el=document.createElement('div'); el.className='vehicle'+(selected===d.imei?' active':''); el.dataset.id=d.imei;
-  const title=label(d); const subtitle=[d.make_model,d.vehicle_type,d.production_year].filter(Boolean).join(' • ');
-  const baseStatus=on?(Number(d.speed_kmh||0)>1?{key:'moving',label:'U VOŽNJI'}:{key:'stopped',label:'ZAUSTAVLJEN'}):{key:'offline',label:'OFFLINE'};
-  statusById[d.imei]=baseStatus;
-  el.innerHTML=`<div class="vtop"><div class="vname">🚌 ${esc(title)}</div><span id="status-${esc(d.imei)}">${statusBadgeHtml(baseStatus)}</span></div>
-  <div class="vsub">${esc(subtitle||'Podaci vozila nisu uneseni')}</div>
-  <div class="vmeta">Zadnje javljanje: <b>${esc((d.last_seen || d.ts_utc) ? fmtTime(d.last_seen || d.ts_utc) : "Nema podatka")}</b></div>
-  <div class="vgrid"><div class="metric"><b>${d.speed_kmh??'-'} km/h</b><span>BRZINA</span></div><div class="metric"><b>${d.angle??'-'}°</b><span>SMJER</span></div><div class="metric"><b>${d.satellites??'-'}</b><span>SATELITI</span></div></div>`;
-  el.onclick=()=>{showDetails(d);if(d.latitude!=null&&d.longitude!=null){map.setView([d.latitude,d.longitude],15);markers[d.imei]?.openPopup();}}; box.appendChild(el);
-  if(d.latitude!=null&&d.longitude!=null){if(!markers[d.imei])markers[d.imei]=L.marker([d.latitude,d.longitude],{icon:makeIcon(on,d.angle)}).addTo(map);else{markers[d.imei].setLatLng([d.latitude,d.longitude]).setIcon(makeIcon(on,d.angle));}markers[d.imei].bindPopup(`<b>${esc(label(d))}</b><br>${esc(d.make_model||'')}<br>${on?'ONLINE':'OFFLINE'}<br>Brzina: ${d.speed_kmh??'-'} km/h<br>Vrijeme: ${fmtTime(d.ts_utc)}`);}
- });
-}
 
-async function load(){try{const r=await fetch('/api/devices',{cache:'no-store'});const data=await r.json();lastData=data;renderList(data);}catch(e){$('updated').textContent='Greška veze';}}
 function localDateInput(){const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;}
 function historyPointTime(p){return new Date(p.ts_utc).getTime();}
 function historyLocalTime(ms){return new Intl.DateTimeFormat('hr-HR',{timeZone:'Europe/Sarajevo',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false}).format(new Date(ms));}
