@@ -942,8 +942,6 @@ async function loadHistory(){
   const initial=getInitialKm(selected);
   $('hsTotal').textContent=initial===null?'-':fmtKm(initial);
 
-  // Ako je početna kilometraža unesena ranije, računamo sve GPS kilometre
-  // od datuma unosa do početka odabranog dana.
   historyCumulativeTotalBeforeDay=0;
   const initialDate=getInitialKmDate(selected);
   if(initial!==null && initialDate && initialDate<from){
@@ -952,40 +950,68 @@ async function loadHistory(){
       if(rr.ok){
         const prev=await rr.json();
         const pp=(prev.points||[]).filter(p=>p.latitude!=null&&p.longitude!=null).sort((a,b)=>historyPointTime(a)-historyPointTime(b));
-        // Uključi samo točke prije odabranog dana.
         const before=pp.filter(p=>new Date(p.ts_utc).toLocaleDateString('en-CA',{timeZone:'Europe/Sarajevo'})<from);
         if(before.length>1)historyCumulativeTotalBeforeDay=buildCumulative(before).at(-1)||0;
       }
     }catch(e){}
   }
 
-  if(historyPoints.length<2){$('historyMsg').textContent='Za odabrani dan nema dovoljno GPS podataka za trasu.';$('historySlider').disabled=true;return;}
-  historyStartMs=new Date(from+'T00:00:00+02:00').getTime();
-  historyEndMs=new Date(to+'T23:59:59+02:00').getTime();
-  historyStartMs=Math.min(historyStartMs,historyPointTime(historyPoints[0]));
-  historyEndMs=Math.max(historyEndMs,historyPointTime(historyPoints[historyPoints.length-1]));
-  $('historyMsg').textContent='Učitavam trasu po cestama...';
-  historyRoadSegments=await buildRoadSegments(historyPoints);
-  historyRoadReady=historyRoadSegments.length===historyPoints.length-1 && historyRoadSegments.every(Boolean);
-  const fullLatLngs=[];
-  const addFull=(q)=>{const prev=fullLatLngs[fullLatLngs.length-1];if(!prev||prev[0]!==q[0]||prev[1]!==q[1])fullLatLngs.push(q);};
-  if(historyRoadReady){for(const seg of historyRoadSegments)for(const q of seg)addFull(q);}
-  else for(const p of historyPoints)addFull([p.latitude,p.longitude]);
-  historyFullLine=L.polyline(fullLatLngs,{weight:4,opacity:.28,color:'#6b7280',className:'history-full-route'}).addTo(map);
-  historyPlayedLine=L.polyline([], {weight:5,opacity:.95,color:'#e0b900'}).addTo(map);
+  if(historyPoints.length<2){
+    $('historyMsg').textContent='Za odabrani dan nema dovoljno GPS podataka za trasu.';
+    $('historySlider').disabled=true;
+    return;
+  }
+
+  historyStartMs=historyPointTime(historyPoints[0]);
+  historyEndMs=historyPointTime(historyPoints[historyPoints.length-1]);
+  historyRoadSegments=[];
+  historyRoadReady=false;
+
+  // VAŽNO: prvo odmah prikaži GPS trasu i omogući timeline.
+  // Cestovno usklađivanje se radi u pozadini i nikada više ne smije blokirati Replay/slider.
+  const rawLatLngs=historyPoints.map(p=>[p.latitude,p.longitude]);
+  historyFullLine=L.polyline(rawLatLngs,{weight:4,opacity:.28,color:'#6b7280',className:'history-full-route'}).addTo(map);
+  historyPlayedLine=L.polyline([],{weight:5,opacity:.95,color:'#e0b900',interactive:true}).addTo(map);
   bindHistoryPlayedLineClick();
-  $('historySlider').disabled=false; $('historySlider').min=0; $('historySlider').max=Math.max(1,Math.ceil((historyEndMs-historyStartMs)/60000)); $('historySlider').value=0;
-  updateHistoryReplay(0);
+
+  $('historySlider').disabled=false;
+  $('historySlider').min=0;
+  $('historySlider').max=Math.max(1,Math.ceil((historyEndMs-historyStartMs)/60000));
+  $('historySlider').value=0;
+
   map.invalidateSize({animate:false});
-  // Ne zumiraj na cijelu trasu: počni s normalnim pregledom oko autobusa.
-  // Tijekom Replaya updateHistoryReplay() stalno drži autobus u sredini vidljivog dijela karte.
   const firstPoint=historyPoints[0];
   map.setView([firstPoint.latitude,firstPoint.longitude],14,{animate:false});
   updateHistoryReplay(0);
-  $('historyMsg').textContent=`Trasa učitana: ${historyPoints.length} GPS točaka. Ruta prati cestu između GPS javljanja.`;
- }catch(e){$('historyMsg').textContent='Greška pri učitavanju povijesti.';}
-}
+  $('historyMsg').textContent=`Trasa učitana: ${historyPoints.length} GPS točaka. Učitavanje cestovne trase...`;
 
+  // Routing je dodatna funkcija. Ako OSRM ne odgovori, ostaje GPS trasa.
+  buildRoadSegments(historyPoints).then(segments=>{
+    try{
+      if(!segments || segments.length!==historyPoints.length-1) return;
+      historyRoadSegments=segments;
+      historyRoadReady=segments.every(Boolean);
+      if(!historyRoadReady)return;
+
+      const full=[];
+      const add=q=>{const prev=full[full.length-1];if(!prev||prev[0]!==q[0]||prev[1]!==q[1])full.push(q);};
+      for(const seg of segments) for(const q of seg) add(q);
+      if(historyFullLine) historyFullLine.setLatLngs(full);
+      updateHistoryReplay(historyReplayMinute);
+      $('historyMsg').textContent=`Trasa učitana: ${historyPoints.length} GPS točaka. Ruta prati cestu između GPS javljanja.`;
+    }catch(e){
+      // GPS trasa ostaje aktivna ako cestovna obrada zakaže.
+      $('historyMsg').textContent=`Trasa učitana: ${historyPoints.length} GPS točaka.`;
+    }
+  }).catch(()=>{
+    $('historyMsg').textContent=`Trasa učitana: ${historyPoints.length} GPS točaka.`;
+  });
+ }catch(e){
+  console.error('Greška povijest:',e);
+  $('historyMsg').textContent='Greška pri učitavanju povijesti. Pokušajte ponovno.';
+  $('historySlider').disabled=true;
+ }
+}
 function localDateInput(){const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;}
 function historyPointTime(p){return new Date(p.ts_utc).getTime();}
 function historyLocalTime(ms){return new Intl.DateTimeFormat('hr-HR',{timeZone:'Europe/Sarajevo',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false}).format(new Date(ms));}
