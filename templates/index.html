@@ -535,7 +535,7 @@ function renderList(data){
   statusById[d.imei]=baseStatus;
   el.innerHTML=`<div class="vtop"><div class="vname">🚌 ${esc(title)}</div><span id="status-${esc(d.imei)}">${statusBadgeHtml(baseStatus)}</span></div>
   <div class="vsub">${esc(subtitle||'Podaci vozila nisu uneseni')}</div>
-  <div class="vmeta">IMEI: ${esc(d.imei)}</div>
+  <div class="vmeta">Zadnje javljanje: <b>${esc((d.last_seen || d.ts_utc) ? fmtTime(d.last_seen || d.ts_utc) : "Nema podatka")}</b></div>
   <div class="vgrid"><div class="metric"><b>${d.speed_kmh??'-'} km/h</b><span>BRZINA</span></div><div class="metric"><b>${d.angle??'-'}°</b><span>SMJER</span></div><div class="metric"><b>${d.satellites??'-'}</b><span>SATELITI</span></div></div>`;
   el.onclick=()=>{showDetails(d);if(d.latitude!=null&&d.longitude!=null){map.setView([d.latitude,d.longitude],15);markers[d.imei]?.openPopup();}}; box.appendChild(el);
   if(d.latitude!=null&&d.longitude!=null){if(!markers[d.imei])markers[d.imei]=L.marker([d.latitude,d.longitude],{icon:makeIcon(on,d.angle)}).addTo(map);else{markers[d.imei].setLatLng([d.latitude,d.longitude]).setIcon(makeIcon(on,d.angle));}markers[d.imei].bindPopup(`<b>${esc(label(d))}</b><br>${esc(d.make_model||'')}<br>${on?'ONLINE':'OFFLINE'}<br>Brzina: ${d.speed_kmh??'-'} km/h<br>Vrijeme: ${fmtTime(d.ts_utc)}`);}
