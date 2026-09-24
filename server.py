@@ -15,7 +15,10 @@ from fastapi.templating import Jinja2Templates
 import uvicorn
 
 BASE = Path(__file__).resolve().parent
-DB = BASE / "globtour_gps.db"
+DATA_DIR = Path(os.getenv("RAILWAY_VOLUME_MOUNT_PATH", "/app/data"))
+DATA_DIR.mkdir(parents=True, exist_ok=True)
+
+DB = DATA_DIR / "globtour_gps.db"
 TCP_HOST = "0.0.0.0"
 TCP_PORT = 9000
 WEB_HOST = "0.0.0.0"
