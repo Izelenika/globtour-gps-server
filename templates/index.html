@@ -509,8 +509,10 @@ function renderList(data){
      // prekinula crtanje svih markera na karti.
      const mapStatus = statusForList(d);
 
-     // Dok gledamo povijest, sakrij trenutnu poziciju odabranog autobusa.
-     if(historyViewing && d.imei===selected){
+     // Dok gledamo povijest, SVA trenutna vozila moraju biti skrivena.
+     // Inače se nakon automatskog refresh-a može pojaviti drugi autobus
+     // (npr. K39A007) preko povijesne trase TEST vozila.
+     if(historyViewing){
        if(markers[d.imei]){markers[d.imei].remove();delete markers[d.imei];}
      }else{
        // I OFFLINE vozilo ostaje na karti na svojoj ZADNJOJ poznatoj GPS poziciji.
@@ -720,9 +722,15 @@ function updateHistoryReplay(minute){
  }
 
  if(!historyReplayMarker){
-   historyReplayMarker=L.marker([p.latitude,p.longitude],{icon:makeIcon(true,p.angle, Number(p.speed_kmh||0)>1 ? 'moving' : 'parked'),zIndexOffset:1000}).addTo(map);
+   historyReplayMarker=L.marker([p.latitude,p.longitude],{icon:makeIcon(true,p.angle, Number(p.speed_kmh||0)>1 ? 'moving' : 'parked'),zIndexOffset:2000}).addTo(map);
  }else{
    historyReplayMarker.setLatLng([p.latitude,p.longitude]).setIcon(makeIcon(true,p.angle, Number(p.speed_kmh||0)>1 ? 'moving' : 'parked'));
+ }
+ const historyVehicle=dataById[historyVehicleImei || selected];
+ if(historyVehicle){
+   historyReplayMarker.unbindTooltip().bindTooltip(esc(label(historyVehicle)),{
+     permanent:true,direction:'top',offset:[0,-12],className:'vehicle-map-label status-moving',opacity:1
+   });
  }
 
  // Povijest je lijevi panel. Drži povijesni autobus u sredini
