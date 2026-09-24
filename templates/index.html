@@ -20,7 +20,7 @@ header{height:64px;background:var(--yellow);display:flex;align-items:center;just
 .vehicle{border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:9px;background:#fff;cursor:pointer;transition:.15s;box-shadow:0 1px 2px #00000008}.vehicle:hover{border-color:#c5ccd3;transform:translateY(-1px)}.vehicle.active{border:2px solid var(--yellow);padding:11px;box-shadow:0 3px 12px #0002}
 .vtop{display:flex;justify-content:space-between;align-items:center;gap:8px}.vname{font-weight:750;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.badge{font-size:10px;font-weight:700;border-radius:20px;padding:4px 7px;white-space:nowrap}.online{background:#e7f7ee;color:var(--green)}.offline{background:#fceaea;color:var(--red)}
 .vsub{font-size:11px;color:var(--muted);margin-top:4px;line-height:1.45}.vmeta{font-size:11px;color:var(--muted);margin-top:6px;padding-top:6px;border-top:1px solid #eef1f3}.vmeta b{color:var(--text)}.vgrid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-top:10px}.metric{background:#f7f9fa;border-radius:8px;padding:7px}.metric b{display:block;font-size:12px}.metric span{font-size:10px;color:var(--muted)}
-.map-wrap{position:relative;min-width:0}.map{height:100%;width:100%}.map-toolbar{position:absolute;top:14px;right:14px;z-index:850;display:flex;gap:7px}.tool{background:#fff;border:1px solid #dfe4e8;border-radius:9px;padding:9px 11px;font-size:12px;cursor:pointer;box-shadow:0 2px 8px #0002}.tool:hover{background:#f8f9fa}
+.map-wrap{position:relative;min-width:0}.map{height:100%;width:100%}.map-toolbar{position:absolute;top:14px;right:62px;z-index:850;display:flex;gap:7px}.tool{background:#fff;border:1px solid #dfe4e8;border-radius:9px;padding:9px 11px;font-size:12px;cursor:pointer;box-shadow:0 2px 8px #0002}.tool:hover{background:#f8f9fa}
 .leaflet-control-layers{z-index:850!important}
 .leaflet-control-layers-toggle{width:38px!important;height:38px!important;background-size:24px 24px!important}
 @media(max-width:900px){
@@ -187,7 +187,6 @@ body{overflow:hidden}
     <div id="map" class="map"></div>
     <div class="map-toolbar">
       <button class="tool" id="fitBtn">Prikaži sva vozila</button>
-      <button class="tool" id="trackBtn">Povijest trase</button>
     </div>
     <div class="legend"><i></i> Online &nbsp; • &nbsp; <span style="color:#c73535">●</span> Offline</div>
     <div class="history-backdrop" id="historyBackdrop"></div>
@@ -1054,7 +1053,7 @@ async function loadHistory(){
 $('search').addEventListener('input',()=>renderList(lastData));
 $('sortVehicles').addEventListener('change',()=>renderList(lastData));
 $('fitBtn').onclick=()=>{const pts=Object.values(markers).map(m=>m.getLatLng());if(pts.length)map.fitBounds(L.latLngBounds(pts),{padding:[40,40]});};
-$('trackBtn').onclick=showHistory; $('historyShow').onclick=loadHistory; $('historyClose').onclick=closeHistory; $('historyBackdrop').onclick=closeHistory; $('historyPlay').onclick=startHistoryReplay; $('historyPause').onclick=stopHistoryReplay; $('historySlider').oninput=e=>updateHistoryReplay(e.target.value); document.querySelectorAll('[data-speed]').forEach(b=>b.onclick=()=>{historySpeed=Number(b.dataset.speed)||1;document.querySelectorAll('[data-speed]').forEach(x=>x.classList.remove('active'));b.classList.add('active');if(historyReplayTimer)startHistoryReplay();});
+$('historyShow').onclick=loadHistory; $('historyClose').onclick=closeHistory; $('historyBackdrop').onclick=closeHistory; $('historyPlay').onclick=startHistoryReplay; $('historyPause').onclick=stopHistoryReplay; $('historySlider').oninput=e=>updateHistoryReplay(e.target.value); document.querySelectorAll('[data-speed]').forEach(b=>b.onclick=()=>{historySpeed=Number(b.dataset.speed)||1;document.querySelectorAll('[data-speed]').forEach(x=>x.classList.remove('active'));b.classList.add('active');if(historyReplayTimer)startHistoryReplay();});
 $('closeDetail').onclick=()=>{$('detail').classList.remove('show');selected=null;document.querySelectorAll('.vehicle').forEach(x=>x.classList.remove('active'));};
 
 // Rezervni klik na kartu: ako klikneš blizu žute povijesne trase, pronađi najbližu
