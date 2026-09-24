@@ -9,4 +9,5 @@ COPY . .
 
 ENV PYTHONUNBUFFERED=1
 
-CMD ["python", "server.py"]
+# Run the HTTP dashboard and the Teltonika TCP listener as separate processes.
+CMD ["sh", "-c", "python gps_tcp.py & exec python server.py"]
