@@ -3,7 +3,9 @@ import sqlite3
 import struct
 import time
 import os
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
+from zoneinfo import ZoneInfo
+import math
 from pathlib import Path
 from contextlib import asynccontextmanager
 
@@ -379,18 +381,100 @@ async def devices():
     return JSONResponse([dict(r) for r in rows])
 
 
+def _local_day_range(date_from: str | None, date_to: str | None):
+    """Convert local Bosnia/Croatia calendar dates to UTC ISO boundaries."""
+    tz = ZoneInfo("Europe/Sarajevo")
+    if not date_from and not date_to:
+        return None, None
+    if not date_from:
+        date_from = date_to
+    if not date_to:
+        date_to = date_from
+    d1 = datetime.strptime(date_from, "%Y-%m-%d").date()
+    d2 = datetime.strptime(date_to, "%Y-%m-%d").date()
+    if d2 < d1:
+        d1, d2 = d2, d1
+    start = datetime.combine(d1, datetime.min.time(), tzinfo=tz).astimezone(timezone.utc)
+    end = datetime.combine(d2 + timedelta(days=1), datetime.min.time(), tzinfo=tz).astimezone(timezone.utc)
+    return start.isoformat(), end.isoformat()
+
+
+def _distance_km(points):
+    total = 0.0
+    for a, b in zip(points, points[1:]):
+        if a["latitude"] is None or a["longitude"] is None or b["latitude"] is None or b["longitude"] is None:
+            continue
+        lat1, lon1 = math.radians(a["latitude"]), math.radians(a["longitude"])
+        lat2, lon2 = math.radians(b["latitude"]), math.radians(b["longitude"])
+        dlat, dlon = lat2 - lat1, lon2 - lon1
+        h = math.sin(dlat/2)**2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon/2)**2
+        total += 6371.0088 * 2 * math.asin(math.sqrt(min(1.0, h)))
+    return total
+
+
 @app.get("/api/positions/{imei}")
-async def history(imei: str, limit: int = 500):
+async def history(imei: str, request: Request, limit: int = 500):
     limit = max(1, min(limit, 5000))
+    params = request.query_params
+    start_utc, end_utc = _local_day_range(params.get("from"), params.get("to"))
     con = db()
-    rows = con.execute("""
-        SELECT ts_utc, latitude, longitude, speed_kmh, angle
-        FROM positions
-        WHERE imei=?
-        ORDER BY id DESC LIMIT ?
-    """, (imei, limit)).fetchall()
+    if start_utc and end_utc:
+        rows = con.execute("""
+            SELECT ts_utc, latitude, longitude, speed_kmh, angle
+            FROM positions
+            WHERE imei=? AND ts_utc>=? AND ts_utc<?
+            ORDER BY id ASC LIMIT ?
+        """, (imei, start_utc, end_utc, limit)).fetchall()
+    else:
+        rows = con.execute("""
+            SELECT ts_utc, latitude, longitude, speed_kmh, angle
+            FROM positions
+            WHERE imei=?
+            ORDER BY id DESC LIMIT ?
+        """, (imei, limit)).fetchall()
     con.close()
-    return JSONResponse([dict(r) for r in reversed(rows)])
+    return JSONResponse([dict(r) for r in rows])
+
+
+@app.get("/api/history/{imei}")
+async def history_summary(imei: str, request: Request, limit: int = 5000):
+    limit = max(1, min(limit, 20000))
+    params = request.query_params
+    start_utc, end_utc = _local_day_range(params.get("from"), params.get("to"))
+    con = db()
+    if start_utc and end_utc:
+        rows = con.execute("""
+            SELECT ts_utc, latitude, longitude, speed_kmh, angle
+            FROM positions
+            WHERE imei=? AND ts_utc>=? AND ts_utc<?
+            ORDER BY id ASC LIMIT ?
+        """, (imei, start_utc, end_utc, limit)).fetchall()
+    else:
+        rows = con.execute("""
+            SELECT ts_utc, latitude, longitude, speed_kmh, angle
+            FROM positions
+            WHERE imei=?
+            ORDER BY id ASC LIMIT ?
+        """, (imei, limit)).fetchall()
+    con.close()
+    points = [dict(r) for r in rows]
+    moving_speeds = [float(p["speed_kmh"] or 0) for p in points]
+    stops = 0
+    was_stopped = False
+    for p in points:
+        stopped = float(p["speed_kmh"] or 0) <= 2
+        if stopped and not was_stopped:
+            stops += 1
+        was_stopped = stopped
+    summary = {
+        "points": len(points),
+        "distance_km": round(_distance_km(points), 2),
+        "max_speed_kmh": round(max(moving_speeds), 1) if moving_speeds else 0,
+        "start_time": points[0]["ts_utc"] if points else None,
+        "end_time": points[-1]["ts_utc"] if points else None,
+        "stops": stops,
+    }
+    return JSONResponse({"points": points, "summary": summary})
 
 
 @app.post("/api/devices/{imei}")
