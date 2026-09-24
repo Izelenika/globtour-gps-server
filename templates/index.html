@@ -1,6 +1,7 @@
 <!doctype html>
 <html lang="hr">
 <head>
+<meta name="globtour-status-version" content="server-authoritative-v13">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Globtour GPS</title>
@@ -297,21 +298,18 @@ function effectiveSeenMs(d){
  return best;
 }
 function isOnline(d){
- const ms=effectiveSeenMs(d);
- if(!ms) return false;
- const age=Date.now()-ms;
- // Svjeze javljanje ostaje ONLINE i nakon refresh-a; ne ceka se novi paket.
- return age>=-5*60*1000 && age<10*60*1000;
+  return d && d.online === true;
 }
 function label(d){return d.registration || 'Neregistrirano vozilo'}
-async function vehicleOperationalStatus(d){
-  // Jednostavna logika statusa za lijevi popis:
-  // OFFLINE = nema javljanja unutar 5 min
-  // U VOŽNJI = online i brzina > 1 km/h
-  // PARKIRAN = online i brzina <= 1 km/h
-  if(!isOnline(d)) return {key:'offline',label:'OFFLINE'};
-  if(Number(d.speed_kmh||0)>1) return {key:'moving',label:'U VOŽNJI'};
-  return {key:'parked',label:'PARKIRAN'};
+function vehicleOperationalStatus(d){
+  return serverStatusObject(d);
+}
+function serverStatusObject(d){
+  const status = String(d?.status || '').toUpperCase();
+  if(status === 'U VOŽNJI') return {key:'moving',label:'U VOŽNJI',parkedMin:0};
+  if(status === 'PARKIRAN') return {key:'parked',label:'PARKIRAN',parkedMin:0};
+  if(status === 'ZAUSTAVLJEN') return {key:'stopped',label:'ZAUSTAVLJEN',parkedMin:0};
+  return {key:'offline',label:'OFFLINE',parkedMin:0};
 }
 function statusBadgeHtml(s){
   if(s.key==='moving') return '<span class="badge online">U VOŽNJI</span>';
@@ -319,11 +317,9 @@ function statusBadgeHtml(s){
   return '<span class="badge offline">OFFLINE</span>';
 }
 async function refreshParkingStatuses(){
-  for(const d of lastData){
-    const s=await vehicleOperationalStatus(d);
-    statusById[d.imei]=s;
-  }
-  if(lastData.length) renderList(lastData);
+  // Status se više ne računa u browseru.
+  // Server vraća online/status kroz /api/devices.
+  return;
 }
 
 function makeIcon(online,angle,statusKey){
@@ -485,87 +481,17 @@ async function saveVehicle(imei){
  }
 }
 function statusForList(d){
-  if(statusById[d.imei]) return statusById[d.imei];
-  const on=isOnline(d);
-  return on
-    ? (Number(d.speed_kmh||0)>1 ? {key:'moving',label:'U VOŽNJI',parkedMin:0} : {key:'stopped',label:'ZAUSTAVLJEN',parkedMin:0})
-    : {key:'offline',label:'OFFLINE',parkedMin:0};
+  return serverStatusObject(d);
 }
 function statusRank(s){
   if(s.key==='moving') return 0;
   if(s.key==='stopped' || s.key==='parked') return 1;
   return 2;
 }
-function lastSeenMs(d){ return effectiveSeenMs(d); }
-function renderList(data){
- const q=$('search').value.trim().toLowerCase();
- const filtered=data.filter(d=>(label(d)+' '+(d.make_model||'')+' '+(d.vehicle_type||'')+' '+(d.imei||'')).toLowerCase().includes(q));
- $('total').textContent=data.length; $('online').textContent=data.filter(isOnline).length; $('moving').textContent=data.filter(d=>Number(d.speed_kmh||0)>1).length; $('updated').textContent='Ažurirano '+new Date().toLocaleTimeString('hr-HR',{hour12:false});
- const sortMode=$('sortVehicles')?.value || 'status';
- const sorted=[...filtered].sort((a,b)=>{
-   if(sortMode==='registration'){
-     return label(a).localeCompare(label(b),'hr',{sensitivity:'base',numeric:true});
-   }
-   if(sortMode==='last'){
-     // Najnovije javljanje uvijek ide na vrh. Ako je vrijeme isto, registracija A–Ž.
-     const diff=lastSeenMs(b)-lastSeenMs(a);
-     if(diff !== 0) return diff;
-     return label(a).localeCompare(label(b),'hr',{sensitivity:'base',numeric:true});
-   }
-   const sa=statusForList(a), sb=statusForList(b);
-   const rankDiff=statusRank(sa)-statusRank(sb);
-   if(rankDiff) return rankDiff;
-   const timeDiff=lastSeenMs(b)-lastSeenMs(a);
-   return timeDiff || label(a).localeCompare(label(b),'hr',{sensitivity:'base',numeric:true});
- });
- const box=$('devices'); if(!sorted.length){box.innerHTML='<div class="empty">Nema vozila za prikaz.</div>';return;} box.innerHTML='';
- sorted.forEach(d=>{
-   dataById[d.imei]=d;
-   const on=isOnline(d);
-   const el=document.createElement('div');
-   el.className='vehicle'+(selected===d.imei?' active':'');
-   el.dataset.id=d.imei;
-   const title=label(d);
-   const subtitle=[d.make_model,d.vehicle_type,d.production_year].filter(Boolean).join(' • ');
-   const baseStatus=statusForList(d);
-   statusById[d.imei]=baseStatus;
-   const lastSeen=d.last_seen || d.ts_utc;
-   el.innerHTML=`<div class="vtop"><div class="vname">🚌 ${esc(title)}</div><span id="status-${esc(d.imei)}">${statusBadgeHtml(baseStatus)}</span></div>
-  <div class="vsub">${esc(subtitle||'Podaci vozila nisu uneseni')}</div>
-  <div class="vmeta">Zadnje javljanje: <b>${esc(lastSeen ? fmtTime(lastSeen) : 'Nema podatka')}</b></div>
-  <div class="vgrid"><div class="metric"><b>${d.speed_kmh??'-'} km/h</b><span>BRZINA</span></div><div class="metric"><b>${d.angle??'-'}°</b><span>SMJER</span></div><div class="metric"><b>${d.satellites??'-'}</b><span>SATELITI</span></div></div>`;
-   el.onclick=()=>{showDetails(d);if(d.latitude!=null&&d.longitude!=null){map.setView([d.latitude,d.longitude],15);markers[d.imei]?.openPopup();}}; box.appendChild(el);
-   if(d.latitude!=null&&d.longitude!=null){
-     // Status mora biti izračunat PRIJE izrade ikone. Inače bi JS greška
-     // prekinula crtanje svih markera na karti.
-     const mapStatus = statusForList(d);
-
-     // Dok gledamo povijest, SVA trenutna vozila moraju biti skrivena.
-     // Inače se nakon automatskog refresh-a može pojaviti drugi autobus
-     // (npr. K39A007) preko povijesne trase TEST vozila.
-     if(historyViewing){
-       if(markers[d.imei]){markers[d.imei].remove();delete markers[d.imei];}
-     }else{
-       // I OFFLINE vozilo ostaje na karti na svojoj ZADNJOJ poznatoj GPS poziciji.
-       // Samo se ikona/oznaka oboji crveno i pokazuje OFFLINE.
-       if(!markers[d.imei]){
-         markers[d.imei]=L.marker([d.latitude,d.longitude],{icon:makeIcon(on,d.angle,mapStatus.key),zIndexOffset:500}).addTo(map);
-       }else{
-         markers[d.imei].setLatLng([d.latitude,d.longitude]).setIcon(makeIcon(on,d.angle,mapStatus.key));
-       }
-       const labelClass = mapStatus.key==='moving' ? 'status-moving' : (mapStatus.key==='offline' ? 'status-offline' : 'status-parked');
-       const regLabel = esc(label(d));
-       markers[d.imei].unbindTooltip().bindTooltip(regLabel,{
-         permanent:true,
-         direction:'top',
-         offset:[0,-12],
-         className:'vehicle-map-label '+labelClass,
-         opacity:1
-       });
-       markers[d.imei].bindPopup(`<b>${regLabel}</b><br>${esc(d.make_model||'')}<br>${on?'ONLINE':'OFFLINE'}${!on?' — zadnja poznata pozicija':''}<br>Brzina: ${d.speed_kmh??'-'} km/h<br>Vrijeme: ${fmtTime(d.ts_utc)}`);
-     }
-   }
- });
+function lastSeenMs(d){
+  if(!d || !d.last_seen) return 0;
+  const ms = Date.parse(d.last_seen);
+  return Number.isFinite(ms) ? ms : 0;
 }
 async function load(){try{const r=await fetch('/api/devices',{cache:'no-store'});const data=await r.json();lastData=data;renderList(data);}catch(e){$('updated').textContent='Greška veze';}}
 function localDateInput(){const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;}
@@ -1274,7 +1200,7 @@ load();
 // Redovito osvježavanje: kada uređaj pošalje novi paket, /api/devices dobije novi last_seen,
 // a renderList ponovno sortira popis pa vozilo s najnovijim javljanjem ide na vrh.
 setInterval(load,3000);
-refreshParkingStatuses(); setInterval(refreshParkingStatuses,30000);
+
 </script>
 </body>
 </html>
