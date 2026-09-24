@@ -15,7 +15,7 @@ header{height:64px;background:var(--yellow);display:flex;align-items:center;just
 .sidebar{background:var(--panel);border-right:1px solid var(--line);display:flex;flex-direction:column;min-width:0;z-index:900}
 .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;padding:14px;border-bottom:1px solid var(--line)}
 .stat{background:#f7f9fa;border:1px solid var(--line);border-radius:10px;padding:10px 11px}.stat .n{font-size:20px;font-weight:800}.stat .l{font-size:11px;color:var(--muted);margin-top:2px}
-.search{padding:12px 14px 8px;border-bottom:1px solid var(--line)}.search input{width:100%;height:38px;border:1px solid #d6dce2;border-radius:9px;padding:0 12px;font-size:13px;outline:none}.search input:focus{border-color:#aab6c2;box-shadow:0 0 0 3px #0000000a}
+.search{padding:12px 14px 8px;border-bottom:1px solid var(--line)}.search input{width:100%;height:38px;border:1px solid #d6dce2;border-radius:9px;padding:0 12px;font-size:13px;outline:none}.search input:focus{border-color:#aab6c2;box-shadow:0 0 0 3px #0000000a}.sort-row{display:flex;align-items:center;gap:7px;margin-top:7px}.sort-row span{font-size:10px;color:var(--muted);white-space:nowrap}.sort-row select{flex:1;height:32px;border:1px solid #d6dce2;border-radius:8px;padding:0 8px;font-size:11px;background:#fff;color:var(--text);outline:none}.vlast{font-size:11px;color:var(--muted);margin-top:6px;padding-top:6px;border-top:1px solid #eef1f3}
 .list{overflow:auto;padding:10px 12px;flex:1}.empty{padding:30px 15px;text-align:center;color:var(--muted);font-size:13px}
 .vehicle{border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:9px;background:#fff;cursor:pointer;transition:.15s;box-shadow:0 1px 2px #00000008}.vehicle:hover{border-color:#c5ccd3;transform:translateY(-1px)}.vehicle.active{border:2px solid var(--yellow);padding:11px;box-shadow:0 3px 12px #0002}
 .vtop{display:flex;justify-content:space-between;align-items:center;gap:8px}.vname{font-weight:750;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.badge{font-size:10px;font-weight:700;border-radius:20px;padding:4px 7px;white-space:nowrap}.online{background:#e7f7ee;color:var(--green)}.offline{background:#fceaea;color:var(--red)}
@@ -42,7 +42,17 @@ header{height:64px;background:var(--yellow);display:flex;align-items:center;just
       <div class="stat"><div class="n" id="online">0</div><div class="l">ONLINE</div></div>
       <div class="stat"><div class="n" id="moving">0</div><div class="l">U VOŽNJI</div></div>
     </div>
-    <div class="search"><input id="search" placeholder="Pretraži registraciju, marku ili model..."></div>
+    <div class="search">
+  <input id="search" placeholder="Pretraži registraciju, marku ili model...">
+  <div class="sort-row">
+    <span>Sortiraj:</span>
+    <select id="sortVehicles">
+      <option value="status" selected>Status → zadnje javljanje → registracija</option>
+      <option value="last">Zadnje javljanje</option>
+      <option value="registration">Registracija A–Ž</option>
+    </select>
+  </div>
+</div>
     <div class="list" id="devices"><div class="empty">Čekam podatke s FMC150...</div></div>
   </aside>
   <main class="map-wrap">
@@ -136,9 +146,8 @@ async function refreshParkingStatuses(){
   for(const d of lastData){
     const s=await vehicleOperationalStatus(d);
     statusById[d.imei]=s;
-    const el=document.getElementById('status-'+d.imei);
-    if(el) el.innerHTML=statusBadgeHtml(s);
   }
+  if(lastData.length) renderList(lastData);
 }
 
 function makeIcon(online,angle){return L.divIcon({className:'',html:`<div style="transform:rotate(${Number(angle||0)}deg);font-size:27px;filter:drop-shadow(0 2px 2px #0005);">${online?'🚌':'⚪'}</div>`,iconSize:[32,32],iconAnchor:[16,16],popupAnchor:[0,-15]});}
@@ -243,20 +252,65 @@ async function saveVehicle(imei){
    msg.textContent='Spremanje nije uspjelo.';
  }
 }
+function statusForList(d){
+  if(statusById[d.imei]) return statusById[d.imei];
+  const on=isOnline(d);
+  return on
+    ? (Number(d.speed_kmh||0)>1 ? {key:'moving',label:'U VOŽNJI',parkedMin:0} : {key:'stopped',label:'ZAUSTAVLJEN',parkedMin:0})
+    : {key:'offline',label:'OFFLINE',parkedMin:0};
+}
+function statusRank(s){
+  if(s.key==='moving') return 0;
+  if(s.key==='stopped' || s.key==='parked') return 1;
+  return 2;
+}
+function lastSeenMs(d){
+  const v=d.last_seen || d.ts_utc;
+  const ms=v ? new Date(v).getTime() : 0;
+  return Number.isFinite(ms) ? ms : 0;
+}
 function renderList(data){
- const q=$('search').value.trim().toLowerCase(); const filtered=data.filter(d=>(label(d)+' '+(d.make_model||'')+' '+(d.vehicle_type||'')+' '+(d.imei||'')).toLowerCase().includes(q));
+ const q=$('search').value.trim().toLowerCase();
+ const filtered=data.filter(d=>(label(d)+' '+(d.make_model||'')+' '+(d.vehicle_type||'')+' '+(d.imei||'')).toLowerCase().includes(q));
  $('total').textContent=data.length; $('online').textContent=data.filter(isOnline).length; $('moving').textContent=data.filter(d=>Number(d.speed_kmh||0)>1).length; $('updated').textContent='Ažurirano '+new Date().toLocaleTimeString('hr-HR',{hour12:false});
- const box=$('devices'); if(!filtered.length){box.innerHTML='<div class="empty">Nema vozila za prikaz.</div>';return;} box.innerHTML='';
- filtered.forEach(d=>{dataById[d.imei]=d; const on=isOnline(d); const el=document.createElement('div'); el.className='vehicle'+(selected===d.imei?' active':''); el.dataset.id=d.imei;
-  const title=label(d); const subtitle=[d.make_model,d.vehicle_type,d.production_year].filter(Boolean).join(' • ');
-  const baseStatus=on?(Number(d.speed_kmh||0)>1?{key:'moving',label:'U VOŽNJI'}:{key:'stopped',label:'ZAUSTAVLJEN'}):{key:'offline',label:'OFFLINE'};
-  statusById[d.imei]=baseStatus;
-  el.innerHTML=`<div class="vtop"><div class="vname">🚌 ${esc(title)}</div><span id="status-${esc(d.imei)}">${statusBadgeHtml(baseStatus)}</span></div>
+ const sortMode=$('sortVehicles')?.value || 'status';
+ const sorted=[...filtered].sort((a,b)=>{
+   if(sortMode==='registration'){
+     return label(a).localeCompare(label(b),'hr',{sensitivity:'base',numeric:true});
+   }
+   if(sortMode==='last'){
+     const diff=lastSeenMs(b)-lastSeenMs(a);
+     return diff || label(a).localeCompare(label(b),'hr',{sensitivity:'base',numeric:true});
+   }
+   const sa=statusForList(a), sb=statusForList(b);
+   const rankDiff=statusRank(sa)-statusRank(sb);
+   if(rankDiff) return rankDiff;
+   const timeDiff=lastSeenMs(b)-lastSeenMs(a);
+   return timeDiff || label(a).localeCompare(label(b),'hr',{sensitivity:'base',numeric:true});
+ });
+ const box=$('devices'); if(!sorted.length){box.innerHTML='<div class="empty">Nema vozila za prikaz.</div>';return;} box.innerHTML='';
+ sorted.forEach(d=>{
+   dataById[d.imei]=d;
+   const on=isOnline(d);
+   const el=document.createElement('div');
+   el.className='vehicle'+(selected===d.imei?' active':'');
+   el.dataset.id=d.imei;
+   const title=label(d);
+   const subtitle=[d.make_model,d.vehicle_type,d.production_year].filter(Boolean).join(' • ');
+   const baseStatus=statusForList(d);
+   statusById[d.imei]=baseStatus;
+   const lastSeen=d.last_seen || d.ts_utc;
+   el.innerHTML=`<div class="vtop"><div class="vname">🚌 ${esc(title)}</div><span id="status-${esc(d.imei)}">${statusBadgeHtml(baseStatus)}</span></div>
   <div class="vsub">${esc(subtitle||'Podaci vozila nisu uneseni')}</div>
   <div class="vmeta">IMEI: ${esc(d.imei)}</div>
+  <div class="vlast">Zadnje javljanje: <b>${esc(lastSeen ? fmtTime(lastSeen) : 'Nema podatka')}</b></div>
   <div class="vgrid"><div class="metric"><b>${d.speed_kmh??'-'} km/h</b><span>BRZINA</span></div><div class="metric"><b>${d.angle??'-'}°</b><span>SMJER</span></div><div class="metric"><b>${d.satellites??'-'}</b><span>SATELITI</span></div></div>`;
-  el.onclick=()=>{showDetails(d);if(d.latitude!=null&&d.longitude!=null){map.setView([d.latitude,d.longitude],15);markers[d.imei]?.openPopup();}}; box.appendChild(el);
-  if(d.latitude!=null&&d.longitude!=null){if(!markers[d.imei])markers[d.imei]=L.marker([d.latitude,d.longitude],{icon:makeIcon(on,d.angle)}).addTo(map);else{markers[d.imei].setLatLng([d.latitude,d.longitude]).setIcon(makeIcon(on,d.angle));}markers[d.imei].bindPopup(`<b>${esc(label(d))}</b><br>${esc(d.make_model||'')}<br>${on?'ONLINE':'OFFLINE'}<br>Brzina: ${d.speed_kmh??'-'} km/h<br>Vrijeme: ${fmtTime(d.ts_utc)}`);}
+   el.onclick=()=>{showDetails(d);if(d.latitude!=null&&d.longitude!=null){map.setView([d.latitude,d.longitude],15);markers[d.imei]?.openPopup();}}; box.appendChild(el);
+   if(d.latitude!=null&&d.longitude!=null){
+     if(!markers[d.imei])markers[d.imei]=L.marker([d.latitude,d.longitude],{icon:makeIcon(on,d.angle)}).addTo(map);
+     else markers[d.imei].setLatLng([d.latitude,d.longitude]).setIcon(makeIcon(on,d.angle));
+     markers[d.imei].bindPopup(`<b>${esc(label(d))}</b><br>${esc(d.make_model||'')}<br>${on?'ONLINE':'OFFLINE'}<br>Brzina: ${d.speed_kmh??'-'} km/h<br>Vrijeme: ${fmtTime(d.ts_utc)}`);
+   }
  });
 }
 async function load(){try{const r=await fetch('/api/devices',{cache:'no-store'});const data=await r.json();lastData=data;renderList(data);}catch(e){$('updated').textContent='Greška veze';}}
@@ -587,7 +641,7 @@ async function loadHistory(){
   $('historyMsg').textContent=`Trasa učitana: ${historyPoints.length} GPS točaka. Povucite klizač ili pokrenite Replay.`;
  }catch(e){$('historyMsg').textContent='Greška pri učitavanju povijesti.';}
 }
-$('search').addEventListener('input',()=>renderList(lastData));
+$('search').addEventListener('input',()=>renderList(lastData));\n$('sortVehicles').addEventListener('change',()=>renderList(lastData));
 $('fitBtn').onclick=()=>{const pts=Object.values(markers).map(m=>m.getLatLng());if(pts.length)map.fitBounds(L.latLngBounds(pts),{padding:[40,40]});};
 $('trackBtn').onclick=showHistory; $('historyShow').onclick=loadHistory; $('historyClose').onclick=closeHistory; $('historyBackdrop').onclick=closeHistory; $('historyPlay').onclick=startHistoryReplay; $('historyPause').onclick=stopHistoryReplay; $('historySlider').oninput=e=>updateHistoryReplay(e.target.value); document.querySelectorAll('[data-speed]').forEach(b=>b.onclick=()=>{historySpeed=Number(b.dataset.speed)||1;document.querySelectorAll('[data-speed]').forEach(x=>x.classList.remove('active'));b.classList.add('active');if(historyReplayTimer)startHistoryReplay();});
 $('closeDetail').onclick=()=>{$('detail').classList.remove('show');selected=null;document.querySelectorAll('.vehicle').forEach(x=>x.classList.remove('active'));};
