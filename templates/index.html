@@ -107,7 +107,7 @@ function renderList(data){
   if(d.latitude!=null&&d.longitude!=null){if(!markers[d.imei])markers[d.imei]=L.marker([d.latitude,d.longitude],{icon:makeIcon(on,d.angle)}).addTo(map);else{markers[d.imei].setLatLng([d.latitude,d.longitude]).setIcon(makeIcon(on,d.angle));}markers[d.imei].bindPopup(`<b>${esc(label(d))}</b><br>${esc(d.make_model||'')}<br>${on?'ONLINE':'OFFLINE'}<br>Brzina: ${d.speed_kmh??'-'} km/h<br>Vrijeme: ${fmtTime(d.ts_utc)}`);}
  });
 }
-async function load(){try{const r=await fetch('/api/devices',{cache:'no-store'});const data=await r.json();lastData=data;renderList(data);if(selected&&dataById[selected])showDetails(dataById[selected]);if(showTrack&&selected)drawTrack(selected);}catch(e){$('updated').textContent='Greška veze';}}
+async function load(){try{const r=await fetch('/api/devices',{cache:'no-store'});const data=await r.json();lastData=data;renderList(data);if(showTrack&&selected)drawTrack(selected);}catch(e){$('updated').textContent='Greška veze';}}
 async function drawTrack(imei){try{const r=await fetch('/api/positions/'+encodeURIComponent(imei)+'?limit=500',{cache:'no-store'});const pts=await r.json();const latlngs=pts.filter(p=>p.latitude!=null&&p.longitude!=null).map(p=>[p.latitude,p.longitude]);if(tracks[imei])tracks[imei].remove();if(latlngs.length>1){tracks[imei]=L.polyline(latlngs,{weight:4,opacity:.75}).addTo(map);map.fitBounds(tracks[imei].getBounds(),{padding:[30,30]});}}catch(e){}}
 $('search').addEventListener('input',()=>renderList(lastData));
 $('fitBtn').onclick=()=>{const pts=Object.values(markers).map(m=>m.getLatLng());if(pts.length)map.fitBounds(L.latLngBounds(pts),{padding:[40,40]});};
