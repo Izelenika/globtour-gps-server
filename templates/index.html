@@ -499,6 +499,44 @@ async function loadVehicleCumulativeKm(imei,toDate){
  }catch(e){return initial;}
 }
 
+
+function showHistoryPointPopup(latlng){
+ if(!historyPoints.length)return;
+ let bestIdx=0, bestDist=Infinity;
+ for(let i=0;i<historyPoints.length;i++){
+   const p=historyPoints[i];
+   const d=map.distance(latlng,[Number(p.latitude),Number(p.longitude)]);
+   if(d<bestDist){bestDist=d;bestIdx=i;}
+ }
+ // Ne pokazuj točke koja još nije prošla u Replayu.
+ const target=historyStartMs+historyReplayMinute*60000;
+ const passedIdx=nearestHistoryIndex(target);
+ if(passedIdx>=0) bestIdx=Math.min(bestIdx,passedIdx);
+ const p=historyPoints[bestIdx];
+ const driven=cumulativeAtPoint(bestIdx);
+ const initial=getInitialKm(selected);
+ const totalAtMoment=initial===null?null:initial+historyCumulativeTotalBeforeDay+driven;
+ const speed=Number(p.speed_kmh||0);
+ const angle=Number(p.angle||0);
+ const popupHtml=`
+   <div style="min-width:190px">
+     <b style="font-size:15px">📍 Povijesna pozicija</b><br>
+     <span><b>Vrijeme:</b> ${historyLocalTime(historyPointTime(p))}</span><br>
+     <span><b>Brzina:</b> ${speed.toLocaleString('hr-HR',{maximumFractionDigits:1})} km/h</span><br>
+     <span><b>Smjer:</b> ${angle}°</span><br>
+     <span><b>Prijeđeno do tada:</b> ${fmtKm(driven)}</span><br>
+     <span><b>Ukupna km vozila:</b> ${totalAtMoment===null?'-':fmtKm(totalAtMoment)}</span>
+   </div>`;
+ L.popup({closeButton:true,autoPan:true,maxWidth:260})
+   .setLatLng([Number(p.latitude),Number(p.longitude)])
+   .setContent(popupHtml)
+   .openOn(map);
+}
+function bindHistoryPlayedLineClick(){
+ if(!historyPlayedLine)return;
+ historyPlayedLine.off('click');
+ historyPlayedLine.on('click',e=>showHistoryPointPopup(e.latlng));
+}
 function updateHistoryReplay(minute){
  if(!historyPoints.length)return;
  historyReplayMinute=Math.max(0,Math.min(1440,Number(minute)||0));
@@ -509,7 +547,7 @@ function updateHistoryReplay(minute){
  const p=historyPoints[idx];
 
  const latlngs=historyPoints.slice(0,idx+1).map(x=>[x.latitude,x.longitude]);
- if(!historyPlayedLine)historyPlayedLine=L.polyline(latlngs,{weight:5,opacity:.95,color:'#e0b900'}).addTo(map);
+ if(!historyPlayedLine){historyPlayedLine=L.polyline(latlngs,{weight:5,opacity:.95,color:'#e0b900'}).addTo(map);bindHistoryPlayedLineClick();}
  else historyPlayedLine.setLatLngs(latlngs);
 
  if(!historyReplayMarker){
@@ -625,6 +663,7 @@ async function loadHistory(){
   const fullLatLngs=historyPoints.map(p=>[p.latitude,p.longitude]);
   historyFullLine=L.polyline(fullLatLngs,{weight:4,opacity:.28,color:'#6b7280',className:'history-full-route'}).addTo(map);
   historyPlayedLine=L.polyline([], {weight:5,opacity:.95,color:'#e0b900'}).addTo(map);
+  bindHistoryPlayedLineClick();
   $('historySlider').disabled=false; $('historySlider').min=0; $('historySlider').max=Math.max(1,Math.ceil((historyEndMs-historyStartMs)/60000)); $('historySlider').value=0;
   updateHistoryReplay(0);
   map.invalidateSize({animate:false});
