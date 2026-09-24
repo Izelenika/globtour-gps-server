@@ -363,6 +363,49 @@ async def dashboard(request: Request):
     return templates.TemplateResponse("index.html", {"request": request})
 
 
+
+def _vehicle_status(last_seen, speed_kmh, last_motion_ts):
+    """
+    Status se određuje ISKLJUČIVO na serveru.
+    - OFFLINE: server nije primio podatak > 10 min
+    - U VOŽNJI: zadnji primljeni GPS zapis ima brzinu > 1 km/h
+    - PARKIRAN: online je, ali nema kretanja >= 2 min
+    - ZAUSTAVLJEN: online je i zaustavljen kraće od 2 min
+    """
+    if not last_seen:
+        return False, "OFFLINE", None
+
+    try:
+        seen = datetime.fromisoformat(str(last_seen).replace("Z", "+00:00"))
+        if seen.tzinfo is None:
+            seen = seen.replace(tzinfo=timezone.utc)
+        age = max(0.0, (datetime.now(timezone.utc) - seen).total_seconds())
+    except Exception:
+        return False, "OFFLINE", None
+
+    if age > 10 * 60:
+        return False, "OFFLINE", round(age, 1)
+
+    speed = float(speed_kmh or 0)
+    if speed > 1:
+        return True, "U VOŽNJI", round(age, 1)
+
+    motion_age = None
+    if last_motion_ts:
+        try:
+            motion = datetime.fromisoformat(str(last_motion_ts).replace("Z", "+00:00"))
+            if motion.tzinfo is None:
+                motion = motion.replace(tzinfo=timezone.utc)
+            motion_age = max(0.0, (datetime.now(timezone.utc) - motion).total_seconds())
+        except Exception:
+            motion_age = None
+
+    if motion_age is not None and motion_age >= 2 * 60:
+        return True, "PARKIRAN", round(age, 1)
+
+    return True, "ZAUSTAVLJEN", round(age, 1)
+
+
 @app.get("/api/devices")
 async def devices():
     con = db()
@@ -371,7 +414,15 @@ async def devices():
                d.production_year, d.note, d.last_seen,
                p.ts_utc, p.latitude, p.longitude, p.speed_kmh,
                p.angle, p.satellites, p.ignition, p.movement,
-               p.gsm_signal, p.external_voltage, p.total_odometer
+               p.gsm_signal, p.external_voltage, p.total_odometer,
+               (
+                   SELECT p3.ts_utc
+                   FROM positions p3
+                   WHERE p3.imei=d.imei
+                     AND COALESCE(p3.speed_kmh, 0) > 1
+                   ORDER BY p3.id DESC
+                   LIMIT 1
+               ) AS last_motion_ts
         FROM devices d
         LEFT JOIN positions p ON p.id = (
             SELECT id FROM positions p2
@@ -381,7 +432,25 @@ async def devices():
         ORDER BY d.imei
     """).fetchall()
     con.close()
-    return JSONResponse([dict(r) for r in rows])
+
+    result = []
+    server_now = datetime.now(timezone.utc).isoformat()
+
+    for row in rows:
+        item = dict(row)
+        online, status, age = _vehicle_status(
+            item.get("last_seen"),
+            item.get("speed_kmh"),
+            item.get("last_motion_ts"),
+        )
+        item["online"] = online
+        item["status"] = status
+        item["last_seen_age_sec"] = age
+        item["server_now"] = server_now
+        item.pop("last_motion_ts", None)
+        result.append(item)
+
+    return JSONResponse(result)
 
 
 def _local_day_range(date_from: str | None, date_to: str | None):
