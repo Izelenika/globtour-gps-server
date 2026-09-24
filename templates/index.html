@@ -19,9 +19,10 @@ header{height:64px;background:var(--yellow);display:flex;align-items:center;just
 .list{overflow:auto;padding:10px 12px;flex:1}.empty{padding:30px 15px;text-align:center;color:var(--muted);font-size:13px}
 .vehicle{border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:9px;background:#fff;cursor:pointer;transition:.15s;box-shadow:0 1px 2px #00000008}.vehicle:hover{border-color:#c5ccd3;transform:translateY(-1px)}.vehicle.active{border:2px solid var(--yellow);padding:11px;box-shadow:0 3px 12px #0002}
 .vtop{display:flex;justify-content:space-between;align-items:center;gap:8px}.vname{font-weight:750;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.badge{font-size:10px;font-weight:700;border-radius:20px;padding:4px 7px;white-space:nowrap}.online{background:#e7f7ee;color:var(--green)}.offline{background:#fceaea;color:var(--red)}
-.vsub{font-size:11px;color:var(--muted);margin-top:4px}.vgrid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-top:10px}.metric{background:#f7f9fa;border-radius:8px;padding:7px}.metric b{display:block;font-size:12px}.metric span{font-size:10px;color:var(--muted)}
+.vsub{font-size:11px;color:var(--muted);margin-top:4px;line-height:1.45}.vmeta{font-size:11px;color:var(--text);margin-top:6px}.vgrid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-top:10px}.metric{background:#f7f9fa;border-radius:8px;padding:7px}.metric b{display:block;font-size:12px}.metric span{font-size:10px;color:var(--muted)}
 .map-wrap{position:relative;min-width:0}.map{height:100%;width:100%}.map-toolbar{position:absolute;top:14px;right:14px;z-index:800;display:flex;gap:7px}.tool{background:#fff;border:1px solid #dfe4e8;border-radius:9px;padding:9px 11px;font-size:12px;cursor:pointer;box-shadow:0 2px 8px #0002}.tool:hover{background:#f8f9fa}
-.detail{position:absolute;right:14px;bottom:14px;width:330px;background:#fff;border-radius:13px;box-shadow:0 5px 25px #0003;z-index:800;display:none;overflow:hidden}.detail.show{display:block}.detail-head{background:#17202a;color:#fff;padding:13px 15px;display:flex;justify-content:space-between;align-items:center}.detail-head .close{cursor:pointer;font-size:20px}.detail-body{padding:13px 15px}.detail-row{display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid #eef1f3;font-size:12px}.detail-row:last-child{border-bottom:0}.detail-row span{color:var(--muted)}
+.detail{position:absolute;right:14px;bottom:14px;width:380px;max-height:calc(100% - 28px);background:#fff;border-radius:13px;box-shadow:0 5px 25px #0003;z-index:800;display:none;overflow:auto}.detail.show{display:block}.detail-head{background:#17202a;color:#fff;padding:13px 15px;display:flex;justify-content:space-between;align-items:center;position:sticky;top:0}.detail-head .close{cursor:pointer;font-size:20px}.detail-body{padding:13px 15px}.detail-section{font-size:11px;text-transform:uppercase;color:var(--muted);font-weight:700;margin:3px 0 8px}.detail-row{display:flex;justify-content:space-between;gap:18px;padding:8px 0;border-bottom:1px solid #eef1f3;font-size:12px}.detail-row:last-child{border-bottom:0}.detail-row span{color:var(--muted)}
+.form{margin-top:10px;padding-top:10px;border-top:1px solid var(--line)}.form label{display:block;font-size:11px;font-weight:700;color:var(--muted);margin:9px 0 4px}.form input,.form textarea{width:100%;border:1px solid #d6dce2;border-radius:8px;padding:8px 9px;font:inherit;font-size:12px;outline:none}.form textarea{min-height:64px;resize:vertical}.form input:focus,.form textarea:focus{border-color:#aab6c2;box-shadow:0 0 0 3px #0000000a}.form-actions{display:flex;gap:8px;margin-top:12px}.btn{border:1px solid #d6dce2;background:#fff;border-radius:8px;padding:8px 11px;font-size:12px;cursor:pointer}.btn.primary{background:var(--yellow);border-color:#e1bd00;font-weight:700}.save-msg{font-size:11px;color:var(--green);margin-top:7px;min-height:14px}
 .legend{position:absolute;left:14px;bottom:14px;z-index:800;background:#fff;border-radius:9px;padding:9px 11px;box-shadow:0 2px 10px #0002;font-size:11px}.legend i{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px;background:var(--green)}
 @media(max-width:850px){body{overflow:auto}.app{height:auto;min-height:calc(100vh - 64px);grid-template-columns:1fr}.sidebar{height:420px}.map-wrap{height:calc(100vh - 484px);min-height:430px}.detail{width:calc(100% - 28px)}}
 </style>
@@ -38,7 +39,7 @@ header{height:64px;background:var(--yellow);display:flex;align-items:center;just
       <div class="stat"><div class="n" id="online">0</div><div class="l">ONLINE</div></div>
       <div class="stat"><div class="n" id="moving">0</div><div class="l">U VOŽNJI</div></div>
     </div>
-    <div class="search"><input id="search" placeholder="Pretraži vozilo, registraciju ili naziv..."></div>
+    <div class="search"><input id="search" placeholder="Pretraži registraciju, marku ili model..."></div>
     <div class="list" id="devices"><div class="empty">Čekam podatke s FMC150...</div></div>
   </aside>
   <main class="map-wrap">
@@ -63,29 +64,47 @@ const $=id=>document.getElementById(id);
 function esc(v){return String(v??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));}
 function fmtTime(v){if(!v)return 'Nema podatka';return new Date(v).toLocaleString('hr-HR',{hour12:false});}
 function isOnline(d){return d.last_seen && (Date.now()-new Date(d.last_seen).getTime()<5*60*1000)}
-function label(d){return d.registration || d.name || ('Vozilo '+String(d.imei).slice(-4));}
+function label(d){return d.registration || 'Neregistrirano vozilo'}
 function makeIcon(online,angle){return L.divIcon({className:'',html:`<div style="transform:rotate(${Number(angle||0)}deg);font-size:27px;filter:drop-shadow(0 2px 2px #0005);">${online?'🚌':'⚪'}</div>`,iconSize:[32,32],iconAnchor:[16,16],popupAnchor:[0,-15]});}
+function detailForm(d){return `<div class="form"><div class="detail-section">Podaci vozila</div>
+<label>Registracija</label><input id="f_registration" value="${esc(d.registration||'')}">
+<label>Marka / model</label><input id="f_make_model" value="${esc(d.make_model||'')}">
+<label>Tip vozila</label><input id="f_vehicle_type" value="${esc(d.vehicle_type||'')}">
+<label>Godina proizvodnje</label><input id="f_production_year" inputmode="numeric" value="${esc(d.production_year||'')}">
+<label>IMEI</label><input value="${esc(d.imei)}" disabled>
+<label>Napomena</label><textarea id="f_note">${esc(d.note||'')}</textarea>
+<div class="form-actions"><button class="btn primary" id="saveVehicle">Spremi podatke</button></div><div class="save-msg" id="saveMsg"></div></div>`}
 function showDetails(d){selected=d.imei; $('detail').classList.add('show'); $('detailTitle').textContent=label(d); $('detailBody').innerHTML=`
-  <div class="detail-row"><b>Status</b><strong style="color:${isOnline(d)?'#16834b':'#c73535'}">${isOnline(d)?'ONLINE':'OFFLINE'}</strong></div>
+  <div class="detail-section">Trenutni GPS podaci</div>
+  <div class="detail-row"><span>Status</span><strong style="color:${isOnline(d)?'#16834b':'#c73535'}">${isOnline(d)?'ONLINE':'OFFLINE'}</strong></div>
   <div class="detail-row"><span>Brzina</span><b>${d.speed_kmh??'-'} km/h</b></div>
   <div class="detail-row"><span>Smjer</span><b>${d.angle??'-'}°</b></div>
   <div class="detail-row"><span>GPS</span><b>${d.latitude?.toFixed?.(6)??'-'}, ${d.longitude?.toFixed?.(6)??'-'}</b></div>
   <div class="detail-row"><span>Sateliti</span><b>${d.satellites??'-'}</b></div>
-  <div class="detail-row"><span>Kontakt</span><b>${fmtTime(d.ts_utc)}</b></div>
+  <div class="detail-row"><span>Zadnji podatak</span><b>${fmtTime(d.ts_utc)}</b></div>
   <div class="detail-row"><span>Napajanje</span><b>${d.external_voltage!=null?Number(d.external_voltage).toFixed(2)+' V':'-'}</b></div>
-  <div class="detail-row"><span>Odometer</span><b>${d.total_odometer!=null?Number(d.total_odometer).toLocaleString('hr-HR')+' km':'-'}</b></div>`;
+  <div class="detail-row"><span>Odometer</span><b>${d.total_odometer!=null?Number(d.total_odometer).toLocaleString('hr-HR')+' km':'-'}</b></div>
+  ${detailForm(d)}`;
+  $('saveVehicle').onclick=()=>saveVehicle(d.imei);
   document.querySelectorAll('.vehicle').forEach(x=>x.classList.toggle('active',x.dataset.id===selected));
 }
+async function saveVehicle(imei){
+ const body={registration:$('f_registration').value.trim(),make_model:$('f_make_model').value.trim(),vehicle_type:$('f_vehicle_type').value.trim(),production_year:$('f_production_year').value.trim(),note:$('f_note').value.trim()};
+ const msg=$('saveMsg'); msg.textContent='Spremanje...';
+ try{const r=await fetch('/api/devices/'+encodeURIComponent(imei),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});if(!r.ok)throw new Error('Greška');msg.textContent='Podaci su spremljeni.';await load();if(dataById[imei])showDetails(dataById[imei]);}catch(e){msg.style.color='#c73535';msg.textContent='Spremanje nije uspjelo.';}
+}
 function renderList(data){
- const q=$('search').value.trim().toLowerCase(); const filtered=data.filter(d=>(label(d)+' '+(d.registration||'')+' '+(d.name||'')).toLowerCase().includes(q));
+ const q=$('search').value.trim().toLowerCase(); const filtered=data.filter(d=>(label(d)+' '+(d.make_model||'')+' '+(d.vehicle_type||'')+' '+(d.imei||'')).toLowerCase().includes(q));
  $('total').textContent=data.length; $('online').textContent=data.filter(isOnline).length; $('moving').textContent=data.filter(d=>Number(d.speed_kmh||0)>1).length; $('updated').textContent='Ažurirano '+new Date().toLocaleTimeString('hr-HR',{hour12:false});
  const box=$('devices'); if(!filtered.length){box.innerHTML='<div class="empty">Nema vozila za prikaz.</div>';return;} box.innerHTML='';
  filtered.forEach(d=>{dataById[d.imei]=d; const on=isOnline(d); const el=document.createElement('div'); el.className='vehicle'+(selected===d.imei?' active':''); el.dataset.id=d.imei;
-  el.innerHTML=`<div class="vtop"><div class="vname">🚌 ${esc(label(d))}</div><span class="badge ${on?'online':'offline'}">${on?'ONLINE':'OFFLINE'}</span></div>
-  <div class="vsub">${esc(d.name||'FMC150 / Teltonika')} ${d.registration?'• '+esc(d.registration):''}</div>
+  const title=label(d); const subtitle=[d.make_model,d.vehicle_type,d.production_year].filter(Boolean).join(' • ');
+  el.innerHTML=`<div class="vtop"><div class="vname">🚌 ${esc(title)}</div><span class="badge ${on?'online':'offline'}">${on?'ONLINE':'OFFLINE'}</span></div>
+  <div class="vsub">${esc(subtitle||'Podaci vozila nisu uneseni')}</div>
+  <div class="vmeta">IMEI: ${esc(d.imei)}</div>
   <div class="vgrid"><div class="metric"><b>${d.speed_kmh??'-'} km/h</b><span>BRZINA</span></div><div class="metric"><b>${d.angle??'-'}°</b><span>SMJER</span></div><div class="metric"><b>${d.satellites??'-'}</b><span>SATELITI</span></div></div>`;
   el.onclick=()=>{showDetails(d);if(d.latitude!=null&&d.longitude!=null){map.setView([d.latitude,d.longitude],15);markers[d.imei]?.openPopup();}}; box.appendChild(el);
-  if(d.latitude!=null&&d.longitude!=null){if(!markers[d.imei])markers[d.imei]=L.marker([d.latitude,d.longitude],{icon:makeIcon(on,d.angle)}).addTo(map);else{markers[d.imei].setLatLng([d.latitude,d.longitude]).setIcon(makeIcon(on,d.angle));}markers[d.imei].bindPopup(`<b>${esc(label(d))}</b><br>${on?'ONLINE':'OFFLINE'}<br>Brzina: ${d.speed_kmh??'-'} km/h<br>Vrijeme: ${fmtTime(d.ts_utc)}`);}
+  if(d.latitude!=null&&d.longitude!=null){if(!markers[d.imei])markers[d.imei]=L.marker([d.latitude,d.longitude],{icon:makeIcon(on,d.angle)}).addTo(map);else{markers[d.imei].setLatLng([d.latitude,d.longitude]).setIcon(makeIcon(on,d.angle));}markers[d.imei].bindPopup(`<b>${esc(label(d))}</b><br>${esc(d.make_model||'')}<br>${on?'ONLINE':'OFFLINE'}<br>Brzina: ${d.speed_kmh??'-'} km/h<br>Vrijeme: ${fmtTime(d.ts_utc)}`);}
  });
 }
 async function load(){try{const r=await fetch('/api/devices',{cache:'no-store'});const data=await r.json();lastData=data;renderList(data);if(selected&&dataById[selected])showDetails(dataById[selected]);if(showTrack&&selected)drawTrack(selected);}catch(e){$('updated').textContent='Greška veze';}}
