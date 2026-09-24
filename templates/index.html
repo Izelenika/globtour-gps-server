@@ -215,32 +215,17 @@ function fmtTime(v){if(!v)return 'Nema podatka';return new Date(v).toLocaleStrin
 function isOnline(d){return d.last_seen && (Date.now()-new Date(d.last_seen).getTime()<5*60*1000)}
 function label(d){return d.registration || 'Neregistrirano vozilo'}
 async function vehicleOperationalStatus(d){
-  if(!isOnline(d)) return {key:'offline',label:'OFFLINE',parkedMin:0};
-  if(Number(d.speed_kmh||0)>1) return {key:'moving',label:'U VOŽNJI',parkedMin:0};
-  try{
-    const r=await fetch('/api/positions/'+encodeURIComponent(d.imei)+'?limit=500',{cache:'no-store'});
-    if(r.ok){
-      const pts=await r.json();
-      let lastMovingMs=0;
-      for(const p of (pts||[])){
-        if(Number(p.speed_kmh||0)>1 && p.ts_utc){
-          const ms=new Date(p.ts_utc).getTime();
-          if(ms>lastMovingMs) lastMovingMs=ms;
-        }
-      }
-      if(lastMovingMs){
-        const parkedMin=Math.max(0,(Date.now()-lastMovingMs)/60000);
-        if(parkedMin>=2) return {key:'parked',label:'PARKIRAN',parkedMin};
-        return {key:'stopped',label:'ZAUSTAVLJEN',parkedMin};
-      }
-    }
-  }catch(e){}
-  return {key:'stopped',label:'ZAUSTAVLJEN',parkedMin:0};
+  // Jednostavna logika statusa za lijevi popis:
+  // OFFLINE = nema javljanja unutar 5 min
+  // U VOŽNJI = online i brzina > 1 km/h
+  // PARKIRAN = online i brzina <= 1 km/h
+  if(!isOnline(d)) return {key:'offline',label:'OFFLINE'};
+  if(Number(d.speed_kmh||0)>1) return {key:'moving',label:'U VOŽNJI'};
+  return {key:'parked',label:'PARKIRAN'};
 }
 function statusBadgeHtml(s){
   if(s.key==='moving') return '<span class="badge online">U VOŽNJI</span>';
-  if(s.key==='parked') return `<span class="badge" style="background:#eef3ff;color:#315ea8">PARKIRAN • ${Math.floor(s.parkedMin)} min</span>`;
-  if(s.key==='stopped') return '<span class="badge" style="background:#fff5dc;color:#9a6a00">ZAUSTAVLJEN</span>';
+  if(s.key==='parked') return '<span class="badge" style="background:#fff5dc;color:#9a6a00">PARKIRAN</span>';
   return '<span class="badge offline">OFFLINE</span>';
 }
 async function refreshParkingStatuses(){
