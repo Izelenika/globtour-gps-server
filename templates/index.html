@@ -200,11 +200,15 @@ body{overflow:hidden}
         </div>
         <div class="history-summary">
           <div class="hs"><b id="hsDistance">0 km</b><span>PRIJEĐENO TAJ DAN</span></div>
+          <div class="hs"><b id="hsDriveTime">0 h 00 min</b><span>VRIJEME U VOŽNJI</span></div>
+          <div class="hs"><b id="hsAvg">0 km/h</b><span>PROSJEČNA BRZINA U VOŽNJI</span></div>
+          <div class="hs"><b id="hsMax">0 km/h</b><span>MAKS. BRZINA</span></div>
+          <div class="hs"><b id="hsStart">-</b><span>POČETAK VOŽNJE</span></div>
+          <div class="hs"><b id="hsEnd">-</b><span>KRAJ VOŽNJE</span></div>
+          <div class="hs"><b id="hsStops">0</b><span>ZAUSTAVLJANJA</span></div>
+          <div class="hs"><b id="hsLongestStop">0 min</b><span>NAJDUŽE ZAUSTAVLJANJE</span></div>
           <div class="hs"><b id="hsAtMoment">0 km</b><span>PRIJEĐENO DO TRENUTKA</span></div>
           <div class="hs"><b id="hsTotal">-</b><span>UKUPNA KM VOZILA</span></div>
-          <div class="hs"><b id="hsMax">0 km/h</b><span>MAKS. BRZINA</span></div>
-          <div class="hs"><b id="hsStops">0</b><span>ZAUSTAVLJANJA</span></div>
-          <div class="hs"><b id="hsPoints">0</b><span>GPS TOČAKA</span></div>
         </div>
         <div class="history-replay">
           <div class="history-time"><strong id="historyReplayTime">--:--:--</strong><span id="historyReplayInfo">Pomaknite klizač ili pokrenite replay</span></div>
@@ -757,6 +761,68 @@ function startHistoryReplay(){
    updateHistoryReplay(next);
  },Math.max(30,250/historySpeed));
 }
+
+function formatDurationMinutes(mins){
+ const m=Math.max(0,Math.round(mins||0));
+ const h=Math.floor(m/60), mm=m%60;
+ if(h>0) return `${h} h ${String(mm).padStart(2,'0')} min`;
+ return `${mm} min`;
+}
+function analyzeDrivingHistory(points){
+ if(!points.length) return {driveMinutes:0,avg:0,max:0,start:null,end:null,stops:0,longestStop:0};
+ const ordered=points.slice().sort((a,b)=>historyPointTime(a)-historyPointTime(b));
+ let driveMs=0, driveDist=0, maxSpeed=0, start=null, end=null;
+ let stopCount=0, longestStopMs=0, stopStart=null, prev=null;
+ const moving=p=>Number(p.speed_kmh||0)>1;
+ for(const p of ordered){
+   const t=historyPointTime(p), s=Number(p.speed_kmh||0);
+   if(s>maxSpeed)maxSpeed=s;
+   if(moving(p)){
+     if(!start) start=t;
+     end=t;
+     if(stopStart!==null){
+       const stopDur=t-stopStart;
+       if(stopDur>=60*1000) stopCount++;
+       if(stopDur>longestStopMs) longestStopMs=stopDur;
+       stopStart=null;
+     }
+   }else if(stopStart===null && prev && !moving(prev)){
+     // Stop starts from the previous GPS record. Short gaps are still counted;
+     // very large gaps are not treated as a confirmed stop.
+     const gap=t-historyPointTime(prev);
+     if(gap<=20*60*1000) stopStart=historyPointTime(prev);
+   }
+   if(prev){
+     const dt=t-historyPointTime(prev);
+     if(dt>0 && dt<=15*60*1000){
+       const dist=haversineKm(prev,p);
+       const segSpeed=dist/(dt/3600000);
+       if(moving(prev) || moving(p)){
+         driveMs+=dt;
+         if(segSpeed<=140) driveDist+=dist;
+       }
+     }
+   }
+   prev=p;
+ }
+ if(stopStart!==null && prev){
+   const stopDur=historyPointTime(prev)-stopStart;
+   if(stopDur>=60*1000) stopCount++;
+   if(stopDur>longestStopMs) longestStopMs=stopDur;
+ }
+ // Fallback: if speed was not recorded consistently, use total moving span.
+ if(driveMs===0 && start!==null && end!==null && end>start) driveMs=end-start;
+ const avg=driveMs>0 ? driveDist/(driveMs/3600000) : 0;
+ return {
+   driveMinutes:driveMs/60000,
+   avg,
+   max:maxSpeed,
+   start,
+   end,
+   stops:stopCount,
+   longestStop:longestStopMs/60000
+ };
+}
 async function showHistory(){
  if(!selected){
    if(lastData.length===1){selected=lastData[0].imei;document.querySelectorAll('.vehicle').forEach(x=>x.classList.toggle('active',x.dataset.id===selected));}
@@ -862,10 +928,16 @@ async function loadHistory(){
   historyCumulativePoints=buildCumulative(historyPoints);
   historyCumulativeTotal=historyCumulativePoints.length?historyCumulativePoints.at(-1):0;
 
+  const drivingStats=analyzeDrivingHistory(historyPoints);
   $('hsDistance').textContent=Number(sm.distance_km||historyCumulativeTotal||0).toLocaleString('hr-HR',{maximumFractionDigits:2})+' km';
+  $('hsDriveTime').textContent=formatDurationMinutes(drivingStats.driveMinutes);
+  $('hsAvg').textContent=Number(drivingStats.avg||0).toLocaleString('hr-HR',{maximumFractionDigits:1})+' km/h';
+  $('hsMax').textContent=Number(Math.max(sm.max_speed_kmh||0,drivingStats.max||0)).toLocaleString('hr-HR',{maximumFractionDigits:1})+' km/h';
+  $('hsStart').textContent=drivingStats.start===null?'-':historyLocalTime(drivingStats.start);
+  $('hsEnd').textContent=drivingStats.end===null?'-':historyLocalTime(drivingStats.end);
+  $('hsStops').textContent=drivingStats.stops;
+  $('hsLongestStop').textContent=formatDurationMinutes(drivingStats.longestStop);
   $('hsAtMoment').textContent='0,0 km';
-  $('hsMax').textContent=Number(sm.max_speed_kmh||0).toLocaleString('hr-HR',{maximumFractionDigits:1})+' km/h';
-  $('hsStops').textContent=sm.stops||0; $('hsPoints').textContent=sm.points||0;
 
   const initial=getInitialKm(selected);
   $('hsTotal').textContent=initial===null?'-':fmtKm(initial);
@@ -989,6 +1061,68 @@ function startHistoryReplay(){
    if(next>=1440 || historyStartMs+next*60000>historyEndMs){updateHistoryReplay(Math.min(1440,Math.ceil((historyEndMs-historyStartMs)/60000)));stopHistoryReplay();return;}
    updateHistoryReplay(next);
  },Math.max(30,250/historySpeed));
+}
+
+function formatDurationMinutes(mins){
+ const m=Math.max(0,Math.round(mins||0));
+ const h=Math.floor(m/60), mm=m%60;
+ if(h>0) return `${h} h ${String(mm).padStart(2,'0')} min`;
+ return `${mm} min`;
+}
+function analyzeDrivingHistory(points){
+ if(!points.length) return {driveMinutes:0,avg:0,max:0,start:null,end:null,stops:0,longestStop:0};
+ const ordered=points.slice().sort((a,b)=>historyPointTime(a)-historyPointTime(b));
+ let driveMs=0, driveDist=0, maxSpeed=0, start=null, end=null;
+ let stopCount=0, longestStopMs=0, stopStart=null, prev=null;
+ const moving=p=>Number(p.speed_kmh||0)>1;
+ for(const p of ordered){
+   const t=historyPointTime(p), s=Number(p.speed_kmh||0);
+   if(s>maxSpeed)maxSpeed=s;
+   if(moving(p)){
+     if(!start) start=t;
+     end=t;
+     if(stopStart!==null){
+       const stopDur=t-stopStart;
+       if(stopDur>=60*1000) stopCount++;
+       if(stopDur>longestStopMs) longestStopMs=stopDur;
+       stopStart=null;
+     }
+   }else if(stopStart===null && prev && !moving(prev)){
+     // Stop starts from the previous GPS record. Short gaps are still counted;
+     // very large gaps are not treated as a confirmed stop.
+     const gap=t-historyPointTime(prev);
+     if(gap<=20*60*1000) stopStart=historyPointTime(prev);
+   }
+   if(prev){
+     const dt=t-historyPointTime(prev);
+     if(dt>0 && dt<=15*60*1000){
+       const dist=haversineKm(prev,p);
+       const segSpeed=dist/(dt/3600000);
+       if(moving(prev) || moving(p)){
+         driveMs+=dt;
+         if(segSpeed<=140) driveDist+=dist;
+       }
+     }
+   }
+   prev=p;
+ }
+ if(stopStart!==null && prev){
+   const stopDur=historyPointTime(prev)-stopStart;
+   if(stopDur>=60*1000) stopCount++;
+   if(stopDur>longestStopMs) longestStopMs=stopDur;
+ }
+ // Fallback: if speed was not recorded consistently, use total moving span.
+ if(driveMs===0 && start!==null && end!==null && end>start) driveMs=end-start;
+ const avg=driveMs>0 ? driveDist/(driveMs/3600000) : 0;
+ return {
+   driveMinutes:driveMs/60000,
+   avg,
+   max:maxSpeed,
+   start,
+   end,
+   stops:stopCount,
+   longestStop:longestStopMs/60000
+ };
 }
 async function showHistory(){
  if(!selected){
