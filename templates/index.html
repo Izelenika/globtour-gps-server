@@ -301,6 +301,7 @@ function renderVehicleDetails(d, editMode=false){
    <div class="detail-row"><span>Brzina</span><b>${d.speed_kmh??'-'} km/h</b></div>
    <div class="detail-row"><span>Smjer</span><b>${d.angle??'-'}°</b></div>
    <div class="detail-row"><span>GPS</span><b>${d.latitude?.toFixed?.(6)??'-'}, ${d.longitude?.toFixed?.(6)??'-'}</b></div>
+   <div class="detail-row"><span>Adresa</span><b id="currentVehicleAddress" style="max-width:68%;text-align:right">Dohvaćam adresu…</b></div>
    <div class="detail-row"><span>Sateliti</span><b>${d.satellites??'-'}</b></div>
    <div class="detail-row"><span>Zadnji podatak</span><b>${fmtTime(d.ts_utc)}</b></div>
    <div class="detail-row"><span>Napajanje</span><b>${d.external_voltage!=null?Number(d.external_voltage).toFixed(2)+' V':'-'}</b></div>
@@ -313,7 +314,55 @@ function renderVehicleDetails(d, editMode=false){
  }else{
    $('vehicleHistory').onclick=()=>showHistory();
    $('editVehicle').onclick=()=>renderVehicleDetails(d,true);
+
+   // Prikaži adresu trenutne GPS pozicije vozila.
+   loadCurrentVehicleAddress(d);
  }
+}
+
+const addressCache = new Map();
+
+async function loadCurrentVehicleAddress(d){
+  const el = document.getElementById('currentVehicleAddress');
+  if(!el) return;
+  const lat = Number(d.latitude), lon = Number(d.longitude);
+  if(!Number.isFinite(lat) || !Number.isFinite(lon)){
+    el.textContent='Nema GPS pozicije';
+    return;
+  }
+
+  const key = lat.toFixed(5)+','+lon.toFixed(5);
+  if(addressCache.has(key)){
+    el.textContent = addressCache.get(key);
+    return;
+  }
+
+  try{
+    const url='https://nominatim.openstreetmap.org/reverse?format=jsonv2'
+      +'&lat='+encodeURIComponent(lat)
+      +'&lon='+encodeURIComponent(lon)
+      +'&zoom=18&addressdetails=1&accept-language=hr';
+    const r=await fetch(url,{headers:{'Accept':'application/json'}});
+    if(!r.ok) throw new Error('Reverse geocoding nije uspio');
+    const geo=await r.json();
+
+    const a=geo.address||{};
+    const shortAddress=[
+      [a.road,a.house_number].filter(Boolean).join(' '),
+      a.village||a.town||a.city||a.municipality,
+      a.county,
+      a.country
+    ].filter(Boolean).join(', ');
+
+    const address=shortAddress || geo.display_name || 'Adresa nije dostupna';
+    addressCache.set(key,address);
+
+    const current=document.getElementById('currentVehicleAddress');
+    if(current) current.textContent=address;
+  }catch(err){
+    const current=document.getElementById('currentVehicleAddress');
+    if(current) current.textContent='Adresa nije dostupna';
+  }
 }
 
 function showDetails(d){
