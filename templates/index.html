@@ -128,8 +128,18 @@ function renderList(data){
 async function load(){try{const r=await fetch('/api/devices',{cache:'no-store'});const data=await r.json();lastData=data;renderList(data);}catch(e){$('updated').textContent='Greška veze';}}
 function localDateInput(){const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;}
 async function showHistory(){
- if(!selected){alert('Prvo odaberite vozilo.');return;}
- const d=dataById[selected];$('historyTitle').textContent='Povijest trase – '+label(d);
+ if(!selected){
+   if(lastData.length===1){
+     selected=lastData[0].imei;
+     document.querySelectorAll('.vehicle').forEach(x=>x.classList.toggle('active',x.dataset.id===selected));
+   }else{
+     alert('Prvo odaberite vozilo.');
+     return;
+   }
+ }
+ const d=dataById[selected] || lastData.find(x=>x.imei===selected);
+ if(!d){alert('Vozilo nije pronađeno.');return;}
+ $('historyTitle').textContent='Povijest trase – '+label(d);
  const today=localDateInput(); if(!$('historyFrom').value)$('historyFrom').value=today; if(!$('historyTo').value)$('historyTo').value=today;
  $('historyModal').classList.add('show');$('historyBackdrop').classList.add('show');
 }
