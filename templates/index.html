@@ -297,7 +297,14 @@ function effectiveSeenMs(d){
  }
  return best;
 }
-function isOnline(d){ return !!(d && d.online === true); }
+function isOnline(d){
+ if(!d) return false;
+ // Svježinu provjeravamo preko zadnjeg javljanja, pa refresh stranice ne mijenja status.
+ const ms=effectiveSeenMs(d);
+ if(!ms) return false;
+ const age=Date.now()-ms;
+ return age>=-5*60*1000 && age<10*60*1000;
+}
 function label(d){return d.registration || 'Neregistrirano vozilo'}
 async function vehicleOperationalStatus(d){
   // Jednostavna logika statusa za lijevi popis:
@@ -480,11 +487,15 @@ async function saveVehicle(imei){
  }
 }
 function statusForList(d){
+  const on=isOnline(d);
+  if(!on) return {key:'offline',label:'OFFLINE',parkedMin:0};
   const status=String(d?.status||'').toUpperCase();
   if(status==='U VOŽNJI') return {key:'moving',label:'U VOŽNJI',parkedMin:0};
   if(status==='PARKIRAN') return {key:'parked',label:'PARKIRAN',parkedMin:0};
   if(status==='ZAUSTAVLJEN') return {key:'stopped',label:'ZAUSTAVLJEN',parkedMin:0};
-  return {key:'offline',label:'OFFLINE',parkedMin:0};
+  return Number(d.speed_kmh||0)>1
+    ? {key:'moving',label:'U VOŽNJI',parkedMin:0}
+    : {key:'stopped',label:'ZAUSTAVLJEN',parkedMin:0};
 }
 function statusRank(s){
   if(s.key==='moving') return 0;
@@ -573,7 +584,7 @@ function clearHistoryVisuals(){
  if(historyPlayedLine){historyPlayedLine.remove();historyPlayedLine=null;}
  if(historyPlayedHitLine){historyPlayedHitLine.remove();historyPlayedHitLine=null;}
  if(historyReplayMarker){historyReplayMarker.remove();historyReplayMarker=null;}
- historyStopMarkers.forEach(m=>{try{m.remove()}catch(e){}}); historyStopMarkers=[];
+ historyStopMarkers.forEach(m=>{try{if(map.hasLayer(m)) map.removeLayer(m); else m.remove();}catch(e){}}); historyStopMarkers=[];
  historyRoadSegments=[]; historyRoadReady=false;
 }
 function nearestHistoryIndex(targetMs){
@@ -828,7 +839,7 @@ function detectHistoryStops(points){
  return stops;
 }
 function renderHistoryStops(stops){
- historyStopMarkers.forEach(m=>{try{m.remove()}catch(e){}});historyStopMarkers=[];
+ historyStopMarkers.forEach(m=>{try{if(map.hasLayer(m)) map.removeLayer(m); else m.remove();}catch(e){}});historyStopMarkers=[];
  stops.forEach((st,i)=>{
   const p=st.point;if(!p||p.latitude==null||p.longitude==null)return;
   const duration=formatDurationMinutes((st.endMs-st.startMs)/60000);
