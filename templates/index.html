@@ -23,7 +23,7 @@ header{height:64px;background:var(--yellow);display:flex;align-items:center;just
 .map-wrap{position:relative;min-width:0}.map{height:100%;width:100%}.map-toolbar{position:absolute;top:14px;right:14px;z-index:800;display:flex;gap:7px}.tool{background:#fff;border:1px solid #dfe4e8;border-radius:9px;padding:9px 11px;font-size:12px;cursor:pointer;box-shadow:0 2px 8px #0002}.tool:hover{background:#f8f9fa}
 .detail{position:absolute;right:14px;bottom:14px;width:380px;max-height:calc(100% - 28px);background:#fff;border-radius:13px;box-shadow:0 5px 25px #0003;z-index:800;display:none;overflow:auto}.detail.show{display:block}.detail-head{background:#17202a;color:#fff;padding:13px 15px;display:flex;justify-content:space-between;align-items:center;position:sticky;top:0}.detail-head .close{cursor:pointer;font-size:20px}.detail-body{padding:13px 15px}.detail-section{font-size:11px;text-transform:uppercase;color:var(--muted);font-weight:700;margin:3px 0 8px}.detail-row{display:flex;justify-content:space-between;gap:18px;padding:8px 0;border-bottom:1px solid #eef1f3;font-size:12px}.detail-row:last-child{border-bottom:0}.detail-row span{color:var(--muted)}
 .form{margin-top:10px;padding-top:10px;border-top:1px solid var(--line)}.form label{display:block;font-size:11px;font-weight:700;color:var(--muted);margin:9px 0 4px}.form input,.form textarea{width:100%;border:1px solid #d6dce2;border-radius:8px;padding:8px 9px;font:inherit;font-size:12px;outline:none}.form textarea{min-height:64px;resize:vertical}.form input:focus,.form textarea:focus{border-color:#aab6c2;box-shadow:0 0 0 3px #0000000a}.form-actions{display:flex;gap:8px;margin-top:12px}.btn{border:1px solid #d6dce2;background:#fff;border-radius:8px;padding:8px 11px;font-size:12px;cursor:pointer}.btn.primary{background:var(--yellow);border-color:#e1bd00;font-weight:700}.save-msg{font-size:11px;color:var(--green);margin-top:7px;min-height:14px}
-.legend{position:absolute;left:14px;bottom:14px;z-index:800;background:#fff;border-radius:9px;padding:9px 11px;box-shadow:0 2px 10px #0002;font-size:11px}.legend i{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px;background:var(--green)}
+.history-modal{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(560px,calc(100% - 28px));max-height:calc(100% - 40px);overflow:auto;background:#fff;border:1px solid var(--line);border-radius:14px;box-shadow:0 12px 45px #0004;z-index:1200;display:none}.history-modal.show{display:block}.history-head{display:flex;justify-content:space-between;align-items:center;padding:14px 16px;border-bottom:1px solid var(--line);font-weight:800}.history-body{padding:15px 16px}.history-filters{display:grid;grid-template-columns:1fr 1fr auto;gap:8px;align-items:end}.history-filters label{display:block;font-size:11px;color:var(--muted);font-weight:700;margin-bottom:4px}.history-filters input{width:100%;height:36px;border:1px solid #d6dce2;border-radius:8px;padding:0 9px;font:inherit;font-size:12px}.history-summary{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;margin-top:12px}.hs{background:#f7f9fa;border-radius:8px;padding:8px}.hs b{display:block;font-size:14px}.hs span{font-size:9px;color:var(--muted)}.history-msg{font-size:11px;color:var(--muted);margin-top:9px;min-height:15px}.history-close{cursor:pointer;font-size:22px;color:var(--muted);line-height:1}.history-backdrop{position:absolute;inset:0;background:#0002;z-index:1100;display:none}.history-backdrop.show{display:block}.legend{position:absolute;left:14px;bottom:14px;z-index:800;background:#fff;border-radius:9px;padding:9px 11px;box-shadow:0 2px 10px #0002;font-size:11px}.legend i{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px;background:var(--green)}
 @media(max-width:850px){body{overflow:auto}.app{height:auto;min-height:calc(100vh - 64px);grid-template-columns:1fr}.sidebar{height:420px}.map-wrap{height:calc(100vh - 484px);min-height:430px}.detail{width:calc(100% - 28px)}}
 </style>
 </head>
@@ -46,9 +46,27 @@ header{height:64px;background:var(--yellow);display:flex;align-items:center;just
     <div id="map" class="map"></div>
     <div class="map-toolbar">
       <button class="tool" id="fitBtn">Prikaži sva vozila</button>
-      <button class="tool" id="trackBtn">Trasa vozila</button>
+      <button class="tool" id="trackBtn">Povijest trase</button>
     </div>
     <div class="legend"><i></i> Online &nbsp; • &nbsp; <span style="color:#c73535">●</span> Offline</div>
+    <div class="history-backdrop" id="historyBackdrop"></div>
+    <section class="history-modal" id="historyModal">
+      <div class="history-head"><span id="historyTitle">Povijest trase</span><span class="history-close" id="historyClose">×</span></div>
+      <div class="history-body">
+        <div class="history-filters">
+          <div><label>OD DATUMA</label><input type="date" id="historyFrom"></div>
+          <div><label>DO DATUMA</label><input type="date" id="historyTo"></div>
+          <button class="btn primary" id="historyShow">Prikaži trasu</button>
+        </div>
+        <div class="history-summary">
+          <div class="hs"><b id="hsDistance">0 km</b><span>PRIJEĐENO</span></div>
+          <div class="hs"><b id="hsMax">0 km/h</b><span>MAKS. BRZINA</span></div>
+          <div class="hs"><b id="hsStops">0</b><span>ZAUSTAVLJANJA</span></div>
+          <div class="hs"><b id="hsPoints">0</b><span>GPS TOČAKA</span></div>
+        </div>
+        <div class="history-msg" id="historyMsg"></div>
+      </div>
+    </section>
     <section class="detail" id="detail">
       <div class="detail-head"><div id="detailTitle">Vozilo</div><div class="close" id="closeDetail">×</div></div>
       <div class="detail-body" id="detailBody"></div>
@@ -107,11 +125,36 @@ function renderList(data){
   if(d.latitude!=null&&d.longitude!=null){if(!markers[d.imei])markers[d.imei]=L.marker([d.latitude,d.longitude],{icon:makeIcon(on,d.angle)}).addTo(map);else{markers[d.imei].setLatLng([d.latitude,d.longitude]).setIcon(makeIcon(on,d.angle));}markers[d.imei].bindPopup(`<b>${esc(label(d))}</b><br>${esc(d.make_model||'')}<br>${on?'ONLINE':'OFFLINE'}<br>Brzina: ${d.speed_kmh??'-'} km/h<br>Vrijeme: ${fmtTime(d.ts_utc)}`);}
  });
 }
-async function load(){try{const r=await fetch('/api/devices',{cache:'no-store'});const data=await r.json();lastData=data;renderList(data);if(showTrack&&selected)drawTrack(selected);}catch(e){$('updated').textContent='Greška veze';}}
-async function drawTrack(imei){try{const r=await fetch('/api/positions/'+encodeURIComponent(imei)+'?limit=500',{cache:'no-store'});const pts=await r.json();const latlngs=pts.filter(p=>p.latitude!=null&&p.longitude!=null).map(p=>[p.latitude,p.longitude]);if(tracks[imei])tracks[imei].remove();if(latlngs.length>1){tracks[imei]=L.polyline(latlngs,{weight:4,opacity:.75}).addTo(map);map.fitBounds(tracks[imei].getBounds(),{padding:[30,30]});}}catch(e){}}
+async function load(){try{const r=await fetch('/api/devices',{cache:'no-store'});const data=await r.json();lastData=data;renderList(data);}catch(e){$('updated').textContent='Greška veze';}}
+function localDateInput(){const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;}
+async function showHistory(){
+ if(!selected){alert('Prvo odaberite vozilo.');return;}
+ const d=dataById[selected];$('historyTitle').textContent='Povijest trase – '+label(d);
+ const today=localDateInput(); if(!$('historyFrom').value)$('historyFrom').value=today; if(!$('historyTo').value)$('historyTo').value=today;
+ $('historyModal').classList.add('show');$('historyBackdrop').classList.add('show');
+}
+function closeHistory(){ $('historyModal').classList.remove('show');$('historyBackdrop').classList.remove('show'); }
+async function loadHistory(){
+ if(!selected)return;
+ const from=$('historyFrom').value,to=$('historyTo').value;
+ if(!from||!to){$('historyMsg').textContent='Odaberite oba datuma.';return;}
+ $('historyMsg').textContent='Učitavam povijest...';
+ try{
+  const r=await fetch('/api/history/'+encodeURIComponent(selected)+'?from='+encodeURIComponent(from)+'&to='+encodeURIComponent(to)+'&limit=20000',{cache:'no-store'});
+  if(!r.ok)throw new Error('HTTP '+r.status);
+  const data=await r.json(); const pts=data.points||[]; const sm=data.summary||{};
+  $('hsDistance').textContent=Number(sm.distance_km||0).toLocaleString('hr-HR',{maximumFractionDigits:2})+' km';
+  $('hsMax').textContent=Number(sm.max_speed_kmh||0).toLocaleString('hr-HR',{maximumFractionDigits:1})+' km/h';
+  $('hsStops').textContent=sm.stops||0; $('hsPoints').textContent=sm.points||0;
+  if(tracks[selected]){tracks[selected].remove();delete tracks[selected];}
+  const latlngs=pts.filter(p=>p.latitude!=null&&p.longitude!=null).map(p=>[p.latitude,p.longitude]);
+  if(latlngs.length>1){tracks[selected]=L.polyline(latlngs,{weight:4,opacity:.78}).addTo(map);map.fitBounds(tracks[selected].getBounds(),{padding:[30,30]});$('historyMsg').textContent='Prikazana je trasa za '+from+' – '+to+'.';}
+  else $('historyMsg').textContent='Za odabrani period nema dovoljno GPS podataka za trasu.';
+ }catch(e){$('historyMsg').textContent='Greška pri učitavanju povijesti.';}
+}
 $('search').addEventListener('input',()=>renderList(lastData));
 $('fitBtn').onclick=()=>{const pts=Object.values(markers).map(m=>m.getLatLng());if(pts.length)map.fitBounds(L.latLngBounds(pts),{padding:[40,40]});};
-$('trackBtn').onclick=async()=>{showTrack=!showTrack;$('trackBtn').textContent=showTrack?'Sakrij trasu':'Trasa vozila';if(selected){if(showTrack)await drawTrack(selected);else if(tracks[selected]){tracks[selected].remove();delete tracks[selected];}}};
+$('trackBtn').onclick=showHistory; $('historyShow').onclick=loadHistory; $('historyClose').onclick=closeHistory; $('historyBackdrop').onclick=closeHistory;
 $('closeDetail').onclick=()=>{$('detail').classList.remove('show');selected=null;document.querySelectorAll('.vehicle').forEach(x=>x.classList.remove('active'));};
 load();setInterval(load,5000);
 </script>
