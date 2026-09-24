@@ -306,9 +306,14 @@ function renderList(data){
   <div class="vgrid"><div class="metric"><b>${d.speed_kmh??'-'} km/h</b><span>BRZINA</span></div><div class="metric"><b>${d.angle??'-'}°</b><span>SMJER</span></div><div class="metric"><b>${d.satellites??'-'}</b><span>SATELITI</span></div></div>`;
    el.onclick=()=>{showDetails(d);if(d.latitude!=null&&d.longitude!=null){map.setView([d.latitude,d.longitude],15);markers[d.imei]?.openPopup();}}; box.appendChild(el);
    if(d.latitude!=null&&d.longitude!=null){
-     if(!markers[d.imei])markers[d.imei]=L.marker([d.latitude,d.longitude],{icon:makeIcon(on,d.angle)}).addTo(map);
-     else markers[d.imei].setLatLng([d.latitude,d.longitude]).setIcon(makeIcon(on,d.angle));
-     markers[d.imei].bindPopup(`<b>${esc(label(d))}</b><br>${esc(d.make_model||'')}<br>${on?'ONLINE':'OFFLINE'}<br>Brzina: ${d.speed_kmh??'-'} km/h<br>Vrijeme: ${fmtTime(d.ts_utc)}`);
+     // Dok gledamo povijest, sakrij trenutnu poziciju odabranog autobusa.
+     if(historyViewing && d.imei===selected){
+       if(markers[d.imei]){markers[d.imei].remove();delete markers[d.imei];}
+     }else{
+       if(!markers[d.imei])markers[d.imei]=L.marker([d.latitude,d.longitude],{icon:makeIcon(on,d.angle)}).addTo(map);
+       else markers[d.imei].setLatLng([d.latitude,d.longitude]).setIcon(makeIcon(on,d.angle));
+       markers[d.imei].bindPopup(`<b>${esc(label(d))}</b><br>${esc(d.make_model||'')}<br>${on?'ONLINE':'OFFLINE'}<br>Brzina: ${d.speed_kmh??'-'} km/h<br>Vrijeme: ${fmtTime(d.ts_utc)}`);
+     }
    }
  });
 }
@@ -336,6 +341,7 @@ const KM_DATE_PREFIX='globtourInitialKmDate_';
 let historyCumulativePoints=[];
 let historyCumulativeTotal=0;
 let historyCumulativeTotalBeforeDay=0;
+let historyViewing=false;
 
 function getInitialKm(imei){
  const v=localStorage.getItem(KM_KEY_PREFIX+imei);
@@ -450,10 +456,20 @@ async function showHistory(){
  $('historyTitle').textContent='Povijest trase – '+label(d);
  const today=localDateInput(); if(!$('historyFrom').value)$('historyFrom').value=today; if(!$('historyTo').value)$('historyTo').value=today;
  $('detail').classList.remove('show');
+ historyViewing=true;
+ if(markers[selected]){markers[selected].remove();delete markers[selected];}
  $('historyModal').classList.add('show');$('historyBackdrop').classList.add('show');
  setTimeout(()=>{map.invalidateSize({animate:false});},30);
 }
-function closeHistory(){stopHistoryReplay();clearHistoryVisuals();historyPoints=[];historyCumulativePoints=[];historyCumulativeTotal=0;historyCumulativeTotalBeforeDay=0;historyStartMs=0;historyEndMs=0;$('historyModal').classList.remove('show');$('historyBackdrop').classList.remove('show'); if(selected && dataById[selected]) $('detail').classList.add('show'); setTimeout(()=>map.invalidateSize({animate:false}),30);}
+function closeHistory(){
+ stopHistoryReplay();clearHistoryVisuals();
+ historyPoints=[];historyCumulativePoints=[];historyCumulativeTotal=0;historyCumulativeTotalBeforeDay=0;historyStartMs=0;historyEndMs=0;
+ historyViewing=false;
+ $('historyModal').classList.remove('show');$('historyBackdrop').classList.remove('show');
+ if(selected && dataById[selected]) $('detail').classList.add('show');
+ renderList(lastData);
+ setTimeout(()=>map.invalidateSize({animate:false}),30);
+}
 async function loadHistory(){
  if(!selected)return;
  stopHistoryReplay(); clearHistoryVisuals();
@@ -605,10 +621,20 @@ async function showHistory(){
  $('historyTitle').textContent='Povijest trase – '+label(d);
  const today=localDateInput(); if(!$('historyFrom').value)$('historyFrom').value=today; if(!$('historyTo').value)$('historyTo').value=today;
  $('detail').classList.remove('show');
+ historyViewing=true;
+ if(markers[selected]){markers[selected].remove();delete markers[selected];}
  $('historyModal').classList.add('show');$('historyBackdrop').classList.add('show');
  setTimeout(()=>{map.invalidateSize({animate:false});},30);
 }
-function closeHistory(){stopHistoryReplay();clearHistoryVisuals();historyPoints=[];historyCumulativePoints=[];historyCumulativeTotal=0;historyCumulativeTotalBeforeDay=0;historyStartMs=0;historyEndMs=0;$('historyModal').classList.remove('show');$('historyBackdrop').classList.remove('show'); if(selected && dataById[selected]) $('detail').classList.add('show'); setTimeout(()=>map.invalidateSize({animate:false}),30);}
+function closeHistory(){
+ stopHistoryReplay();clearHistoryVisuals();
+ historyPoints=[];historyCumulativePoints=[];historyCumulativeTotal=0;historyCumulativeTotalBeforeDay=0;historyStartMs=0;historyEndMs=0;
+ historyViewing=false;
+ $('historyModal').classList.remove('show');$('historyBackdrop').classList.remove('show');
+ if(selected && dataById[selected]) $('detail').classList.add('show');
+ renderList(lastData);
+ setTimeout(()=>map.invalidateSize({animate:false}),30);
+}
 async function loadHistory(){
  if(!selected)return;
  stopHistoryReplay(); clearHistoryVisuals();
