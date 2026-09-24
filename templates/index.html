@@ -518,13 +518,19 @@ function updateHistoryReplay(minute){
    historyReplayMarker.setLatLng([p.latitude,p.longitude]).setIcon(makeIcon(true,p.angle));
  }
 
- // Povijest je desni panel. Pomakni kartu ulijevo tako da autobus
- // ostane u vidljivom dijelu karte, a ne ispod panela.
+ // Povijest je lijevi panel. Drži povijesni autobus u sredini
+ // stvarno vidljivog dijela karte, bez odzumiranja na cijelu trasu.
  const panel=document.getElementById('historyModal');
- const z=map.getZoom();
+ const mapEl=map.getContainer();
+ const panelRect=panel?.getBoundingClientRect();
+ const mapRect=mapEl.getBoundingClientRect();
+ const overlap=Math.max(0, Math.min(mapRect.right,panelRect?.right||0)-Math.max(mapRect.left,panelRect?.left||0));
+ let z=map.getZoom();
+ if(!Number.isFinite(z) || z<12) z=14;
  const pt=map.project([p.latitude,p.longitude],z);
- const shiftX=Math.round((panel?.offsetWidth||390)/2 + 20);
- const center=map.unproject([pt.x-shiftX,pt.y],z);
+ // Ako panel prekriva dio karte, pomakni središte udesno za polovicu preklopa.
+ const shiftX=overlap/2;
+ const center=map.unproject([pt.x+shiftX,pt.y],z);
  map.setView(center,z,{animate:false});
 
  const speed=Number(p.speed_kmh||0);
@@ -622,7 +628,10 @@ async function loadHistory(){
   $('historySlider').disabled=false; $('historySlider').min=0; $('historySlider').max=Math.max(1,Math.ceil((historyEndMs-historyStartMs)/60000)); $('historySlider').value=0;
   updateHistoryReplay(0);
   map.invalidateSize({animate:false});
-  map.fitBounds(historyFullLine.getBounds(),{paddingTopLeft:[35,35],paddingBottomRight:[35,35],maxZoom:14});
+  // Ne zumiraj na cijelu trasu: počni s normalnim pregledom oko autobusa.
+  // Tijekom Replaya updateHistoryReplay() stalno drži autobus u sredini vidljivog dijela karte.
+  const firstPoint=historyPoints[0];
+  map.setView([firstPoint.latitude,firstPoint.longitude],14,{animate:false});
   updateHistoryReplay(0);
   $('historyMsg').textContent=`Trasa učitana: ${historyPoints.length} GPS točaka. Povucite klizač ili pokrenite Replay.`;
  }catch(e){$('historyMsg').textContent='Greška pri učitavanju povijesti.';}
@@ -667,13 +676,19 @@ function updateHistoryReplay(minute){
  }
 
  // Karta uvijek prati trenutnu poziciju vozila.
- // Povijest je desni panel. Pomakni kartu ulijevo tako da autobus
- // ostane u vidljivom dijelu karte, a ne ispod panela.
+ // Povijest je lijevi panel. Drži povijesni autobus u sredini
+ // stvarno vidljivog dijela karte, bez odzumiranja na cijelu trasu.
  const panel=document.getElementById('historyModal');
- const z=map.getZoom();
+ const mapEl=map.getContainer();
+ const panelRect=panel?.getBoundingClientRect();
+ const mapRect=mapEl.getBoundingClientRect();
+ const overlap=Math.max(0, Math.min(mapRect.right,panelRect?.right||0)-Math.max(mapRect.left,panelRect?.left||0));
+ let z=map.getZoom();
+ if(!Number.isFinite(z) || z<12) z=14;
  const pt=map.project([p.latitude,p.longitude],z);
- const shiftX=Math.round((panel?.offsetWidth||390)/2 + 20);
- const center=map.unproject([pt.x-shiftX,pt.y],z);
+ // Ako panel prekriva dio karte, pomakni središte udesno za polovicu preklopa.
+ const shiftX=overlap/2;
+ const center=map.unproject([pt.x+shiftX,pt.y],z);
  map.setView(center,z,{animate:false});
 
  const elapsed=Math.max(0,Math.round((historyPointTime(p)-historyStartMs)/60000));
