@@ -207,7 +207,8 @@ body{overflow:hidden}
 const map=L.map('map',{preferCanvas:true}).setView([43.35,17.81],8);
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'}).addTo(map);
 const markers={}, tracks={}, dataById={}; let selected=null; let showTrack=false; let lastData=[]; const statusById={};
-let historyPoints=[]; let historyReplayTimer=null; let historyReplayMinute=0; let historyStartMs=0; let historyEndMs=0; let historySpeed=5; let historyFullLine=null; let historyPlayedLine=null; let historyReplayMarker=null;
+let historyPoints=[]; let historyReplayTimer=null; let historyReplayMinute=0; let historyStartMs=0; let historyEndMs=0; let historySpeed=5; let historyFullLine=null; let historyPlayedLine=null;
+let historyPlayedHitLine=null; let historyReplayMarker=null;
 const $=id=>document.getElementById(id);
 function esc(v){return String(v??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));}
 function fmtTime(v){if(!v)return 'Nema podatka';return new Date(v).toLocaleString('hr-HR',{hour12:false});}
@@ -428,6 +429,7 @@ function clearHistoryVisuals(){
  if(historyReplayTimer){clearInterval(historyReplayTimer);historyReplayTimer=null;}
  if(historyFullLine){historyFullLine.remove();historyFullLine=null;}
  if(historyPlayedLine){historyPlayedLine.remove();historyPlayedLine=null;}
+ if(historyPlayedHitLine){historyPlayedHitLine.remove();historyPlayedHitLine=null;}
  if(historyReplayMarker){historyReplayMarker.remove();historyReplayMarker=null;}
 }
 function nearestHistoryIndex(targetMs){
@@ -533,9 +535,16 @@ function showHistoryPointPopup(latlng){
    .openOn(map);
 }
 function bindHistoryPlayedLineClick(){
- if(!historyPlayedLine)return;
- historyPlayedLine.off('click');
- historyPlayedLine.on('click',e=>showHistoryPointPopup(e.latlng));
+ const bind=(line)=>{
+   if(!line)return;
+   line.off('click');
+   line.on('click',e=>{
+     L.DomEvent.stopPropagation(e);
+     showHistoryPointPopup(e.latlng);
+   });
+ };
+ bind(historyPlayedLine);
+ bind(historyPlayedHitLine);
 }
 function updateHistoryReplay(minute){
  if(!historyPoints.length)return;
@@ -547,8 +556,20 @@ function updateHistoryReplay(minute){
  const p=historyPoints[idx];
 
  const latlngs=historyPoints.slice(0,idx+1).map(x=>[x.latitude,x.longitude]);
- if(!historyPlayedLine){historyPlayedLine=L.polyline(latlngs,{weight:5,opacity:.95,color:'#e0b900'}).addTo(map);bindHistoryPlayedLineClick();}
- else historyPlayedLine.setLatLngs(latlngs);
+ if(!historyPlayedLine){
+   // Vidljiva žuta trasa + šira nevidljiva "klik zona" kako bi klik bio
+   // pouzdan čak i kada je linija tanka ili se klikne blizu nje.
+   historyPlayedHitLine=L.polyline(latlngs,{
+     weight:18, opacity:0, color:'#000', interactive:true
+   }).addTo(map);
+   historyPlayedLine=L.polyline(latlngs,{
+     weight:5, opacity:.95, color:'#e0b900', interactive:true
+   }).addTo(map);
+   bindHistoryPlayedLineClick();
+ }else{
+   historyPlayedLine.setLatLngs(latlngs);
+   if(historyPlayedHitLine) historyPlayedHitLine.setLatLngs(latlngs);
+ }
 
  if(!historyReplayMarker){
    historyReplayMarker=L.marker([p.latitude,p.longitude],{icon:makeIcon(true,p.angle),zIndexOffset:1000}).addTo(map);
@@ -684,6 +705,7 @@ function clearHistoryVisuals(){
  if(historyReplayTimer){clearInterval(historyReplayTimer);historyReplayTimer=null;}
  if(historyFullLine){historyFullLine.remove();historyFullLine=null;}
  if(historyPlayedLine){historyPlayedLine.remove();historyPlayedLine=null;}
+ if(historyPlayedHitLine){historyPlayedHitLine.remove();historyPlayedHitLine=null;}
  if(historyReplayMarker){historyReplayMarker.remove();historyReplayMarker=null;}
 }
 function nearestHistoryIndex(targetMs){
