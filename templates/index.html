@@ -1025,7 +1025,9 @@ async function buildRoadSegments(points){
     const end=Math.min(points.length-1, start+chunkSize);
     const chunk=points.slice(start,end+1);
     const coords=chunk.map(p=>`${Number(p.longitude)},${Number(p.latitude)}`).join(';');
-    const url=`https://router.project-osrm.org/route/v1/driving/${coords}?overview=false&steps=true&geometries=geojson&continue_straight=true`;
+    // Ne forsiramo continue_straight: na kružnim tokovima to može natjerati
+    // OSRM da napravi nepotreban puni krug između dvije GPS točke.
+    const url=`https://router.project-osrm.org/route/v1/driving/${coords}?overview=false&steps=true&geometries=geojson`;
     try{
       const r=await fetch(url,{cache:'no-store'});
       if(!r.ok) throw new Error('OSRM HTTP '+r.status);
@@ -1046,13 +1048,32 @@ async function buildRoadSegments(points){
         if(ll.length<2){
           ll=[[chunk[i].latitude,chunk[i].longitude],[chunk[i+1].latitude,chunk[i+1].longitude]];
         }
-        // ukloni neposredne duplikate
+        // Ukloni neposredne duplikate.
         const clean=[];
         for(const q of ll){
           const prev=clean[clean.length-1];
           if(!prev || prev[0]!==q[0] || prev[1]!==q[1]) clean.push(q);
         }
-        segments[start+i]=clean;
+
+        // Zaštita od pogrešnog map-matchinga (npr. umjetni krug oko kružnog toka).
+        // Ako je OSRM ruta višestruko duža od stvarnog GPS pomaka, vjerujemo
+        // stvarnim GPS točkama i ne crtamo umjetni obilazak.
+        const a=chunk[i], b=chunk[i+1];
+        const directKm=haversineKm(a,b);
+        let routedKm=0;
+        for(let j=1;j<clean.length;j++){
+          routedKm += haversineKm(
+            {latitude:clean[j-1][0],longitude:clean[j-1][1]},
+            {latitude:clean[j][0],longitude:clean[j][1]}
+          );
+        }
+        const badRoute = !Number.isFinite(routedKm) ||
+          (directKm > 0.03 && routedKm > Math.max(directKm * 2.5, directKm + 0.30));
+        if(badRoute){
+          segments[start+i]=[[a.latitude,a.longitude],[b.latitude,b.longitude]];
+        }else{
+          segments[start+i]=clean;
+        }
       }
     }catch(e){
       // Ako routing servis nije dostupan, povijest i dalje radi — samo taj
