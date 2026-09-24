@@ -299,8 +299,12 @@ function effectiveSeenMs(d){
 }
 function isOnline(d){
  if(!d) return false;
- // Svježinu provjeravamo preko zadnjeg javljanja, pa refresh stranice ne mijenja status.
- const ms=effectiveSeenMs(d);
+ // Ako backend vraća server-authoritative status, njega koristimo.
+ // Time F5/refresh ne može sam promijeniti status vozila.
+ if(typeof d.online === 'boolean') return d.online;
+ // Fallback: koristi ISKLJUČIVO serverovo last_seen.
+ // Ne uspoređujemo ga s ts_utc jer je ts_utc vrijeme GPS zapisa i može biti starije.
+ const ms=parseSeenMs(d.last_seen);
  if(!ms) return false;
  const age=Date.now()-ms;
  return age>=-5*60*1000 && age<10*60*1000;
@@ -578,13 +582,20 @@ function localDateInput(){const d=new Date();return `${d.getFullYear()}-${String
 function historyPointTime(p){return new Date(p.ts_utc).getTime();}
 function historyLocalTime(ms){return new Intl.DateTimeFormat('hr-HR',{timeZone:'Europe/Sarajevo',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false}).format(new Date(ms));}
 function historySliderTime(ms){return new Intl.DateTimeFormat('hr-HR',{timeZone:'Europe/Sarajevo',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false}).format(new Date(ms));}
+function clearHistoryStops(){
+ historyStopMarkers.forEach(m=>{
+   try{ if(map.hasLayer(m)) map.removeLayer(m); }catch(e){}
+   try{ if(m && m._map) m.remove(); }catch(e){}
+ });
+ historyStopMarkers=[];
+}
 function clearHistoryVisuals(){
  if(historyReplayTimer){clearInterval(historyReplayTimer);historyReplayTimer=null;}
  if(historyFullLine){historyFullLine.remove();historyFullLine=null;}
  if(historyPlayedLine){historyPlayedLine.remove();historyPlayedLine=null;}
  if(historyPlayedHitLine){historyPlayedHitLine.remove();historyPlayedHitLine=null;}
  if(historyReplayMarker){historyReplayMarker.remove();historyReplayMarker=null;}
- historyStopMarkers.forEach(m=>{try{if(map.hasLayer(m)) map.removeLayer(m); else m.remove();}catch(e){}}); historyStopMarkers=[];
+ clearHistoryStops();
  historyRoadSegments=[]; historyRoadReady=false;
 }
 function nearestHistoryIndex(targetMs){
@@ -930,7 +941,7 @@ async function showHistory(){
 }
 function closeHistory(){
  const restoreImei=historyVehicleImei || selected;
- stopHistoryReplay();clearHistoryVisuals();
+ stopHistoryReplay();clearHistoryVisuals();clearHistoryStops();
  historyPoints=[];historyCumulativePoints=[];historyCumulativeTotal=0;historyCumulativeTotalBeforeDay=0;historyStartMs=0;historyEndMs=0;
  historyViewing=false;
  $('historyModal').classList.remove('show');$('historyBackdrop').classList.remove('show');
@@ -1255,7 +1266,7 @@ $('search').addEventListener('input',()=>renderList(lastData));
 $('sortVehicles').addEventListener('change',()=>renderList(lastData));
 $('fitBtn').onclick=()=>{const pts=Object.values(markers).map(m=>m.getLatLng());if(pts.length)map.fitBounds(L.latLngBounds(pts),{padding:[40,40]});};
 $('historyShow').onclick=loadHistory; $('historyClose').onclick=closeHistory; $('historyBackdrop').onclick=closeHistory; $('historyPlay').onclick=startHistoryReplay; $('historyPause').onclick=stopHistoryReplay; $('historySlider').oninput=e=>updateHistoryReplay(e.target.value); document.querySelectorAll('[data-speed]').forEach(b=>b.onclick=()=>{historySpeed=Number(b.dataset.speed)||1;document.querySelectorAll('[data-speed]').forEach(x=>x.classList.remove('active'));b.classList.add('active');if(historyReplayTimer)startHistoryReplay();});
-$('closeDetail').onclick=()=>{$('detail').classList.remove('show');selected=null;document.querySelectorAll('.vehicle').forEach(x=>x.classList.remove('active'));};
+$('closeDetail').onclick=()=>{clearHistoryStops();$('detail').classList.remove('show');selected=null;document.querySelectorAll('.vehicle').forEach(x=>x.classList.remove('active'));};
 
 // Rezervni klik na kartu: ako klikneš blizu žute povijesne trase, pronađi najbližu
 // već prijeđenu GPS točku i prikaži njezino vrijeme. Ovo radi čak i ako Leaflet
