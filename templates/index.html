@@ -561,6 +561,7 @@ let historyCumulativePoints=[];
 let historyCumulativeTotal=0;
 let historyCumulativeTotalBeforeDay=0;
 let historyViewing=false;
+let historyVehicleImei=null;
 
 function getInitialKm(imei){
  const v=localStorage.getItem(KM_KEY_PREFIX+imei);
@@ -632,7 +633,7 @@ async function showHistoryPointPopup(latlng){
  const p=historyPoints[bestIdx];
  const lat=Number(p.latitude), lon=Number(p.longitude);
  const driven=cumulativeAtPoint(bestIdx);
- const initial=getInitialKm(selected);
+ const initial=getInitialKm(historyVehicleImei || selected);
  const totalAtMoment=initial===null?null:initial+historyCumulativeTotalBeforeDay+driven;
  const speed=Number(p.speed_kmh||0);
  const angle=Number(p.angle||0);
@@ -742,7 +743,7 @@ function updateHistoryReplay(minute){
  const speed=Number(p.speed_kmh||0);
  const angle=Number(p.angle||0);
  const driven=cumulativeAtPoint(idx);
- const initial=getInitialKm(selected);
+ const initial=getInitialKm(historyVehicleImei || selected);
  const totalAtMoment=initial===null?null:initial+historyCumulativeTotalBeforeDay+driven;
 
  $('historyReplayTime').textContent=historySliderTime(target);
@@ -824,25 +825,37 @@ function analyzeDrivingHistory(points){
  };
 }
 async function showHistory(){
- if(!selected){
-   if(lastData.length===1){selected=lastData[0].imei;document.querySelectorAll('.vehicle').forEach(x=>x.classList.toggle('active',x.dataset.id===selected));}
-   else{alert('Prvo odaberite vozilo.');return;}
- }
- const d=dataById[selected] || lastData.find(x=>x.imei===selected); if(!d){alert('Vozilo nije pronađeno.');return;}
+ // Zaključaj vozilo za ovu sesiju povijesti. Ne oslanjamo se više na globalni
+ // 'selected', jer se on može promijeniti prilikom osvježavanja/klikanja po karti.
+ const historyImei = selected || (lastData.length===1 ? lastData[0].imei : null);
+ if(!historyImei){alert('Prvo odaberite vozilo.');return;}
+ const d=dataById[historyImei] || lastData.find(x=>x.imei===historyImei);
+ if(!d){alert('Vozilo nije pronađeno.');return;}
+ historyVehicleImei=historyImei;
+ selected=historyImei;
+ document.querySelectorAll('.vehicle').forEach(x=>x.classList.toggle('active',x.dataset.id===historyImei));
  $('historyTitle').textContent='Povijest trase – '+label(d);
  const today=localDateInput(); if(!$('historyFrom').value)$('historyFrom').value=today; if(!$('historyTo').value)$('historyTo').value=today;
  $('detail').classList.remove('show');
  historyViewing=true;
- if(markers[selected]){markers[selected].remove();delete markers[selected];}
+ // Dok je povijest otvorena, ukloni SVE trenutne markere. Na karti ostaje samo
+ // povijesna pozicija/replay odabranog vozila, pa se ne može zamijeniti s drugim busom.
+ Object.keys(markers).forEach(id=>{if(markers[id]) markers[id].remove(); delete markers[id];});
  $('historyModal').classList.add('show');$('historyBackdrop').classList.add('show');
  setTimeout(()=>{map.invalidateSize({animate:false});},30);
 }
 function closeHistory(){
+ const restoreImei=historyVehicleImei || selected;
  stopHistoryReplay();clearHistoryVisuals();
  historyPoints=[];historyCumulativePoints=[];historyCumulativeTotal=0;historyCumulativeTotalBeforeDay=0;historyStartMs=0;historyEndMs=0;
  historyViewing=false;
  $('historyModal').classList.remove('show');$('historyBackdrop').classList.remove('show');
- if(selected && dataById[selected]) $('detail').classList.add('show');
+ if(restoreImei && dataById[restoreImei]){
+   selected=restoreImei;
+   $('detail').classList.add('show');
+   renderVehicleDetails(dataById[restoreImei],false);
+ }
+ historyVehicleImei=null;
  renderList(lastData);
  setTimeout(()=>map.invalidateSize({animate:false}),30);
 }
@@ -915,13 +928,14 @@ function roadLatLngsUntilIndex(idx){
 }
 
 async function loadHistory(){
- if(!selected)return;
+ const historyImei=historyVehicleImei || selected;
+ if(!historyImei)return;
  stopHistoryReplay(); clearHistoryVisuals();
  const from=$('historyFrom').value,to=$('historyTo').value;
  if(!from||!to){$('historyMsg').textContent='Odaberite oba datuma.';return;}
  $('historyMsg').textContent='Učitavam povijest...';
  try{
-  const r=await fetch('/api/history/'+encodeURIComponent(selected)+'?from='+encodeURIComponent(from)+'&to='+encodeURIComponent(to)+'&limit=20000',{cache:'no-store'});
+  const r=await fetch('/api/history/'+encodeURIComponent(historyImei)+'?from='+encodeURIComponent(from)+'&to='+encodeURIComponent(to)+'&limit=20000',{cache:'no-store'});
   if(!r.ok)throw new Error('HTTP '+r.status);
   const data=await r.json(); const sm=data.summary||{};
   historyPoints=(data.points||[]).filter(p=>p.latitude!=null&&p.longitude!=null).sort((a,b)=>historyPointTime(a)-historyPointTime(b));
@@ -939,14 +953,14 @@ async function loadHistory(){
   $('hsLongestStop').textContent=formatDurationMinutes(drivingStats.longestStop);
   $('hsAtMoment').textContent='0,0 km';
 
-  const initial=getInitialKm(selected);
+  const initial=getInitialKm(historyImei);
   $('hsTotal').textContent=initial===null?'-':fmtKm(initial);
 
   historyCumulativeTotalBeforeDay=0;
   const initialDate=getInitialKmDate(selected);
   if(initial!==null && initialDate && initialDate<from){
     try{
-      const rr=await fetch('/api/history/'+encodeURIComponent(selected)+'?from='+encodeURIComponent(initialDate)+'&to='+encodeURIComponent(from)+'&limit=20000',{cache:'no-store'});
+      const rr=await fetch('/api/history/'+encodeURIComponent(historyImei)+'?from='+encodeURIComponent(initialDate)+'&to='+encodeURIComponent(from)+'&limit=20000',{cache:'no-store'});
       if(rr.ok){
         const prev=await rr.json();
         const pp=(prev.points||[]).filter(p=>p.latitude!=null&&p.longitude!=null).sort((a,b)=>historyPointTime(a)-historyPointTime(b));
@@ -1151,25 +1165,37 @@ function analyzeDrivingHistory(points){
  };
 }
 async function showHistory(){
- if(!selected){
-   if(lastData.length===1){selected=lastData[0].imei;document.querySelectorAll('.vehicle').forEach(x=>x.classList.toggle('active',x.dataset.id===selected));}
-   else{alert('Prvo odaberite vozilo.');return;}
- }
- const d=dataById[selected] || lastData.find(x=>x.imei===selected); if(!d){alert('Vozilo nije pronađeno.');return;}
+ // Zaključaj vozilo za ovu sesiju povijesti. Ne oslanjamo se više na globalni
+ // 'selected', jer se on može promijeniti prilikom osvježavanja/klikanja po karti.
+ const historyImei = selected || (lastData.length===1 ? lastData[0].imei : null);
+ if(!historyImei){alert('Prvo odaberite vozilo.');return;}
+ const d=dataById[historyImei] || lastData.find(x=>x.imei===historyImei);
+ if(!d){alert('Vozilo nije pronađeno.');return;}
+ historyVehicleImei=historyImei;
+ selected=historyImei;
+ document.querySelectorAll('.vehicle').forEach(x=>x.classList.toggle('active',x.dataset.id===historyImei));
  $('historyTitle').textContent='Povijest trase – '+label(d);
  const today=localDateInput(); if(!$('historyFrom').value)$('historyFrom').value=today; if(!$('historyTo').value)$('historyTo').value=today;
  $('detail').classList.remove('show');
  historyViewing=true;
- if(markers[selected]){markers[selected].remove();delete markers[selected];}
+ // Dok je povijest otvorena, ukloni SVE trenutne markere. Na karti ostaje samo
+ // povijesna pozicija/replay odabranog vozila, pa se ne može zamijeniti s drugim busom.
+ Object.keys(markers).forEach(id=>{if(markers[id]) markers[id].remove(); delete markers[id];});
  $('historyModal').classList.add('show');$('historyBackdrop').classList.add('show');
  setTimeout(()=>{map.invalidateSize({animate:false});},30);
 }
 function closeHistory(){
+ const restoreImei=historyVehicleImei || selected;
  stopHistoryReplay();clearHistoryVisuals();
  historyPoints=[];historyCumulativePoints=[];historyCumulativeTotal=0;historyCumulativeTotalBeforeDay=0;historyStartMs=0;historyEndMs=0;
  historyViewing=false;
  $('historyModal').classList.remove('show');$('historyBackdrop').classList.remove('show');
- if(selected && dataById[selected]) $('detail').classList.add('show');
+ if(restoreImei && dataById[restoreImei]){
+   selected=restoreImei;
+   $('detail').classList.add('show');
+   renderVehicleDetails(dataById[restoreImei],false);
+ }
+ historyVehicleImei=null;
  renderList(lastData);
  setTimeout(()=>map.invalidateSize({animate:false}),30);
 }
