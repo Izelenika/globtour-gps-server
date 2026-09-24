@@ -145,6 +145,11 @@ body{overflow:hidden}
   .stat .l{font-size:8px}
 }
 
+
+.vehicle-arrow-icon{background:transparent!important;border:0!important;}
+.vehicle-arrow-wrap{width:34px;height:34px;position:relative;display:flex;align-items:center;justify-content:center;transform-origin:50% 50%;filter:drop-shadow(0 1px 2px rgba(0,0,0,.45));}
+.vehicle-arrow{position:absolute;top:2px;left:50%;transform:translateX(-50%);width:0;height:0;border-left:8px solid transparent;border-right:8px solid transparent;border-bottom:23px solid #159447;}
+.vehicle-arrow-dot{position:absolute;width:9px;height:9px;border-radius:50%;left:50%;top:15px;transform:translate(-50%,-50%);border:2px solid #fff;box-sizing:border-box;}
 </style>
 </head>
 <body>
@@ -253,7 +258,14 @@ async function refreshParkingStatuses(){
   if(lastData.length) renderList(lastData);
 }
 
-function makeIcon(online,angle){return L.divIcon({className:'',html:`<div style="transform:rotate(${Number(angle||0)}deg);font-size:27px;filter:drop-shadow(0 2px 2px #0005);">${online?'🚌':'⚪'}</div>`,iconSize:[32,32],iconAnchor:[16,16],popupAnchor:[0,-15]});}
+function makeIcon(online,angle,statusKey){
+  const color = !online || statusKey==='offline' ? '#d93636' : (statusKey==='moving' ? '#159447' : '#e0a900');
+  return L.divIcon({
+    className:'vehicle-arrow-icon',
+    html:`<div class="vehicle-arrow-wrap" style="transform:rotate(${Number(angle||0)}deg);"><span class="vehicle-arrow" style="border-bottom-color:${color};"></span><span class="vehicle-arrow-dot" style="background:${color};"></span></div>`,
+    iconSize:[34,34],iconAnchor:[17,17],popupAnchor:[0,-17]
+  });
+}
 function vehicleInfoView(d){
  const optional=[
    ['Registracija',d.registration],
@@ -464,8 +476,8 @@ function renderList(data){
      if(historyViewing && d.imei===selected){
        if(markers[d.imei]){markers[d.imei].remove();delete markers[d.imei];}
      }else{
-       if(!markers[d.imei])markers[d.imei]=L.marker([d.latitude,d.longitude],{icon:makeIcon(on,d.angle),zIndexOffset:500}).addTo(map);
-       else markers[d.imei].setLatLng([d.latitude,d.longitude]).setIcon(makeIcon(on,d.angle));
+       if(!markers[d.imei])markers[d.imei]=L.marker([d.latitude,d.longitude],{icon:makeIcon(on,d.angle,mapStatus.key),zIndexOffset:500}).addTo(map);
+       else markers[d.imei].setLatLng([d.latitude,d.longitude]).setIcon(makeIcon(on,d.angle,mapStatus.key));
        const mapStatus = statusForList(d);
        const labelClass = mapStatus.key==='moving' ? 'status-moving' : (mapStatus.key==='offline' ? 'status-offline' : 'status-parked');
        const regLabel = esc(label(d));
@@ -665,9 +677,9 @@ function updateHistoryReplay(minute){
  }
 
  if(!historyReplayMarker){
-   historyReplayMarker=L.marker([p.latitude,p.longitude],{icon:makeIcon(true,p.angle),zIndexOffset:1000}).addTo(map);
+   historyReplayMarker=L.marker([p.latitude,p.longitude],{icon:makeIcon(true,p.angle, Number(p.speed_kmh||0)>1 ? 'moving' : 'parked'),zIndexOffset:1000}).addTo(map);
  }else{
-   historyReplayMarker.setLatLng([p.latitude,p.longitude]).setIcon(makeIcon(true,p.angle));
+   historyReplayMarker.setLatLng([p.latitude,p.longitude]).setIcon(makeIcon(true,p.angle, Number(p.speed_kmh||0)>1 ? 'moving' : 'parked'));
  }
 
  // Povijest je lijevi panel. Drži povijesni autobus u sredini
@@ -824,9 +836,9 @@ function updateHistoryReplay(minute){
  else historyPlayedLine.setLatLngs(latlngs);
 
  if(!historyReplayMarker){
-   historyReplayMarker=L.marker([p.latitude,p.longitude],{icon:makeIcon(true,p.angle),zIndexOffset:1000}).addTo(map);
+   historyReplayMarker=L.marker([p.latitude,p.longitude],{icon:makeIcon(true,p.angle, Number(p.speed_kmh||0)>1 ? 'moving' : 'parked'),zIndexOffset:1000}).addTo(map);
  }else{
-   historyReplayMarker.setLatLng([p.latitude,p.longitude]).setIcon(makeIcon(true,p.angle));
+   historyReplayMarker.setLatLng([p.latitude,p.longitude]).setIcon(makeIcon(true,p.angle, Number(p.speed_kmh||0)>1 ? 'moving' : 'parked'));
  }
 
  // Karta uvijek prati trenutnu poziciju vozila.
