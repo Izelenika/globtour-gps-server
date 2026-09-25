@@ -3,14 +3,18 @@ import sqlite3
 import struct
 import time
 import os
+import hashlib
+import hmac
+import secrets
 from datetime import datetime, timezone, timedelta
 from zoneinfo import ZoneInfo
 import math
 from pathlib import Path
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi import FastAPI, Request, HTTPException
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from starlette.middleware.sessions import SessionMiddleware
 from fastapi.templating import Jinja2Templates
 import uvicorn
 
@@ -36,6 +40,24 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Globtour GPS Server", lifespan=lifespan)
 templates = Jinja2Templates(directory=str(BASE / "templates"))
+
+SESSION_SECRET_FILE = DATA_DIR / ".session_secret"
+SESSION_SECRET = os.getenv("SESSION_SECRET")
+if not SESSION_SECRET:
+    if SESSION_SECRET_FILE.exists():
+        SESSION_SECRET = SESSION_SECRET_FILE.read_text(encoding="utf-8").strip()
+    else:
+        SESSION_SECRET = secrets.token_urlsafe(48)
+        SESSION_SECRET_FILE.write_text(SESSION_SECRET, encoding="utf-8")
+
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=SESSION_SECRET,
+    session_cookie="globtour_gps_session",
+    max_age=8 * 60 * 60,
+    same_site="lax",
+    https_only=os.getenv("COOKIE_SECURE","0").strip().lower() in ("1","true","yes"),
+)
 
 
 def db():
@@ -94,12 +116,80 @@ def init_db():
         if col not in cols:
             con.execute(sql)
 
+    con.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT UNIQUE NOT NULL,
+            password_hash TEXT NOT NULL,
+            full_name TEXT DEFAULT '',
+            role TEXT NOT NULL DEFAULT 'user',
+            permissions TEXT DEFAULT '',
+            active INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT NOT NULL
+        )
+    """)
+    con.commit()
+
+    admin_username = (os.getenv("ADMIN_USERNAME") or "admin").strip() or "admin"
+    admin_password = os.getenv("ADMIN_PASSWORD") or "PromijeniMe123!"
+    if not os.getenv("ADMIN_PASSWORD"):
+        print("[AUTH] UPOZORENJE: ADMIN_PASSWORD nije postavljen; koristi se početna lozinka. Promijenite je odmah.", flush=True)
+    existing_admin = con.execute("SELECT id FROM users WHERE username=?", (admin_username,)).fetchone()
+    if not existing_admin:
+        con.execute(
+            "INSERT INTO users(username,password_hash,full_name,role,permissions,active,created_at) VALUES(?,?,?,?,?,?,?)",
+            (admin_username, hash_password(admin_password), "Globtour administrator", "admin", "*", 1, now_utc()),
+        )
     con.commit()
     con.close()
 
 
 def now_utc():
     return datetime.now(timezone.utc).isoformat()
+
+
+def hash_password(password: str) -> str:
+    salt = secrets.token_bytes(16)
+    digest = hashlib.scrypt(password.encode("utf-8"), salt=salt, n=2**14, r=8, p=1)
+    return "scrypt$16384$8$1$" + salt.hex() + "$" + digest.hex()
+
+
+def verify_password(password: str, stored: str) -> bool:
+    try:
+        scheme, n, r, p, salt_hex, digest_hex = stored.split("$")
+        if scheme != "scrypt":
+            return False
+        digest = hashlib.scrypt(password.encode("utf-8"), salt=bytes.fromhex(salt_hex), n=int(n), r=int(r), p=int(p))
+        return hmac.compare_digest(digest.hex(), digest_hex)
+    except Exception:
+        return False
+
+
+def get_current_user(request: Request):
+    user_id = request.session.get("user_id")
+    if not user_id:
+        return None
+    con = db()
+    row = con.execute("SELECT id, username, full_name, role, permissions, active FROM users WHERE id=?", (user_id,)).fetchone()
+    con.close()
+    if not row or not int(row["active"] or 0):
+        request.session.clear()
+        return None
+    return dict(row)
+
+
+def require_user(request: Request):
+    user = get_current_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Niste prijavljeni.")
+    return user
+
+
+def require_admin(request: Request):
+    user = require_user(request)
+    if str(user.get("role") or "").lower() != "admin":
+        raise HTTPException(status_code=403, detail="Potrebna je administratorska ovlast.")
+    return user
 
 
 def crc16_ibm(data: bytes) -> int:
@@ -358,10 +448,48 @@ async def handle_tracker(reader, writer):
             pass
 
 
+LOGIN_HTML = r"""<!doctype html><html lang="hr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Prijava – Globtour GPS</title><style>*{box-sizing:border-box}body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:#f4f6f8;font-family:Inter,Segoe UI,Arial,sans-serif;color:#17202a}.login{width:min(420px,calc(100% - 32px));background:#fff;border:1px solid #e3e7eb;border-radius:18px;padding:30px;box-shadow:0 12px 40px #0002}.logo{font-size:26px;font-weight:850;margin-bottom:5px}.logo span{font-weight:500}.sub{color:#66727e;font-size:13px;margin-bottom:25px}.field{margin-bottom:14px}.field label{display:block;font-size:12px;font-weight:700;margin-bottom:6px}.field input{width:100%;height:44px;border:1px solid #d6dce2;border-radius:9px;padding:0 12px;font-size:14px;outline:none}.field input:focus{border-color:#b6a000;box-shadow:0 0 0 3px #ffd40033}.btn{width:100%;height:44px;border:0;border-radius:9px;background:#ffd400;color:#17202a;font-size:14px;font-weight:800;cursor:pointer}.err{min-height:20px;color:#c73535;font-size:12px;margin:8px 0}.foot{font-size:11px;color:#8a949e;text-align:center;margin-top:18px}</style></head><body><div class="login"><div class="logo">GLOBTOUR <span>GPS</span></div><div class="sub">Prijava u sustav za praćenje vozila</div><form id="f"><div class="field"><label>Korisničko ime</label><input id="u" autocomplete="username" required autofocus></div><div class="field"><label>Lozinka</label><input id="p" type="password" autocomplete="current-password" required></div><div id="e" class="err"></div><button class="btn" type="submit">Prijava</button></form><div class="foot">Pristup je dozvoljen samo ovlaštenim korisnicima.</div></div><script>document.getElementById('f').addEventListener('submit',async e=>{e.preventDefault();const m=document.getElementById('e');m.textContent='Prijava...';try{const r=await fetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:document.getElementById('u').value.trim(),password:document.getElementById('p').value})});const d=await r.json().catch(()=>({}));if(!r.ok){m.textContent=d.detail||'Pogrešno korisničko ime ili lozinka.';return}location.href='/';}catch(x){m.textContent='Greška veze sa serverom.';}});</script></body></html>"""
+
+@app.get("/login", response_class=HTMLResponse)
+async def login_page(request: Request):
+    if get_current_user(request):
+        return RedirectResponse(url="/", status_code=303)
+    return HTMLResponse(LOGIN_HTML)
+
+@app.post("/api/login")
+async def login(request: Request):
+    body = await request.json()
+    username = str(body.get("username", "") or "").strip()
+    password = str(body.get("password", "") or "")
+    con = db()
+    row = con.execute("SELECT id, username, full_name, role, permissions, active, password_hash FROM users WHERE username=?", (username,)).fetchone()
+    con.close()
+    if not row or not int(row["active"] or 0) or not verify_password(password, row["password_hash"]):
+        return JSONResponse({"detail":"Pogrešno korisničko ime ili lozinka."}, status_code=401)
+    request.session.clear()
+    request.session["user_id"] = int(row["id"])
+    request.session["username"] = row["username"]
+    request.session["role"] = row["role"]
+    return {"ok":True,"username":row["username"],"role":row["role"]}
+
+@app.post("/api/logout")
+async def logout(request: Request):
+    request.session.clear()
+    return {"ok":True}
+
+@app.get("/api/me")
+async def me(request: Request):
+    user = get_current_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Niste prijavljeni.")
+    user.pop("permissions", None)
+    return user
+
 @app.get("/", response_class=HTMLResponse)
 async def dashboard(request: Request):
+    if not get_current_user(request):
+        return RedirectResponse(url="/login", status_code=303)
     return templates.TemplateResponse("index.html", {"request": request})
-
 
 
 def _vehicle_status(last_seen, speed_kmh, last_motion_ts):
@@ -407,7 +535,8 @@ def _vehicle_status(last_seen, speed_kmh, last_motion_ts):
 
 
 @app.get("/api/devices")
-async def devices():
+async def devices(request: Request):
+    require_user(request)
     con = db()
     rows = con.execute("""
         SELECT d.imei, d.registration, d.make_model, d.vehicle_type,
@@ -486,6 +615,7 @@ def _distance_km(points):
 
 @app.get("/api/positions/{imei}")
 async def history(imei: str, request: Request, limit: int = 500):
+    require_user(request)
     limit = max(1, min(limit, 5000))
     params = request.query_params
     start_utc, end_utc = _local_day_range(params.get("from"), params.get("to"))
@@ -510,6 +640,7 @@ async def history(imei: str, request: Request, limit: int = 500):
 
 @app.get("/api/history/{imei}")
 async def history_summary(imei: str, request: Request, limit: int = 5000):
+    require_user(request)
     limit = max(1, min(limit, 20000))
     params = request.query_params
     start_utc, end_utc = _local_day_range(params.get("from"), params.get("to"))
@@ -551,6 +682,7 @@ async def history_summary(imei: str, request: Request, limit: int = 5000):
 
 @app.post("/api/devices/{imei}")
 async def update_device(imei: str, request: Request):
+    require_user(request)
     body = await request.json()
     registration = str(body.get("registration", "") or "").strip()
     make_model = str(body.get("make_model", "") or "").strip()
@@ -584,6 +716,48 @@ async def update_device(imei: str, request: Request):
     con.close()
     return {"ok": True}
 
+
+@app.get("/api/users")
+async def list_users(request: Request):
+    require_admin(request)
+    con = db(); rows = con.execute("SELECT id, username, full_name, role, permissions, active, created_at FROM users ORDER BY username").fetchall(); con.close()
+    return JSONResponse([dict(r) for r in rows])
+
+@app.post("/api/users")
+async def create_user(request: Request):
+    require_admin(request)
+    body = await request.json()
+    username = str(body.get("username", "") or "").strip()
+    password = str(body.get("password", "") or "")
+    full_name = str(body.get("full_name", "") or "").strip()
+    role = str(body.get("role", "user") or "user").strip().lower()
+    if len(username) < 3: raise HTTPException(status_code=400, detail="Korisničko ime mora imati najmanje 3 znaka.")
+    if len(password) < 8: raise HTTPException(status_code=400, detail="Lozinka mora imati najmanje 8 znakova.")
+    if role not in ("admin", "user"): role = "user"
+    con = db()
+    try:
+        cur = con.execute("INSERT INTO users(username,password_hash,full_name,role,permissions,active,created_at) VALUES(?,?,?,?,?,?,?)", (username,hash_password(password),full_name,role,"*" if role=="admin" else "",1,now_utc()))
+        con.commit(); uid=cur.lastrowid
+    except sqlite3.IntegrityError:
+        con.close(); raise HTTPException(status_code=409, detail="Korisničko ime već postoji.")
+    con.close(); return {"ok":True,"id":uid}
+
+@app.patch("/api/users/{user_id}")
+async def update_user(user_id: int, request: Request):
+    admin = require_admin(request); body = await request.json(); con = db()
+    row = con.execute("SELECT id, role, active FROM users WHERE id=?", (user_id,)).fetchone()
+    if not row: con.close(); raise HTTPException(status_code=404, detail="Korisnik nije pronađen.")
+    role = str(body.get("role", row["role"]) or row["role"]).strip().lower(); active = 1 if bool(body.get("active", bool(row["active"]))) else 0
+    if role not in ("admin","user"): role = row["role"]
+    if int(row["id"]) == int(admin["id"]) and (role != "admin" or not active):
+        n = con.execute("SELECT COUNT(*) AS n FROM users WHERE role='admin' AND active=1 AND id<>?", (user_id,)).fetchone()["n"]
+        if int(n)==0: con.close(); raise HTTPException(status_code=400, detail="Ne možete ukloniti ovlasti posljednjem aktivnom administratoru.")
+    con.execute("UPDATE users SET role=?, active=? WHERE id=?", (role,active,user_id))
+    if body.get("password"):
+        password=str(body["password"]);
+        if len(password)<8: con.close(); raise HTTPException(status_code=400, detail="Nova lozinka mora imati najmanje 8 znakova.")
+        con.execute("UPDATE users SET password_hash=? WHERE id=?", (hash_password(password),user_id))
+    con.commit(); con.close(); return {"ok":True}
 
 if __name__ == "__main__":
     uvicorn.run(app, host=WEB_HOST, port=WEB_PORT, reload=False)
