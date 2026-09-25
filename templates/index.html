@@ -401,7 +401,7 @@ function renderVehicleDetails(d, editMode=false){
    <div class="detail-row"><span>Sateliti</span><b>${d.satellites??'-'}</b></div>
    <div class="detail-row"><span>Zadnji podatak</span><b>${fmtTime(d.ts_utc)}</b></div>
    <div class="detail-row"><span>Napajanje</span><b>${d.external_voltage!=null?Number(d.external_voltage).toFixed(2)+' V':'-'}</b></div>
-   <div class="detail-row"><span>Odometer</span><b>${d.total_odometer!=null?Number(d.total_odometer).toLocaleString('hr-HR')+' km':'-'}</b></div>
+   <div class="detail-row"><span>Ukupna kilometraža</span><b id="currentVehicleOdometer">${getInitialKm(d.imei)!==null?fmtKm(getInitialKm(d.imei)):'-'}</b></div>
    ${editMode ? detailForm(d) : vehicleInfoView(d)}`;
 
  if(editMode){
@@ -413,6 +413,9 @@ function renderVehicleDetails(d, editMode=false){
 
    // Prikaži adresu trenutne GPS pozicije vozila.
    loadCurrentVehicleAddress(d);
+
+   // Ukupna kilometraža = početna kilometraža + svi GPS kilometri od datuma unosa.
+   refreshVehicleTotalOdometer(d.imei);
  }
 }
 
@@ -677,6 +680,17 @@ async function loadVehicleCumulativeKm(imei,toDate){
    if(pts.length<2)return initial;
    return initial+buildCumulative(pts).at(-1);
  }catch(e){return initial;}
+}
+async function refreshVehicleTotalOdometer(imei){
+ const el=document.getElementById('currentVehicleOdometer');
+ if(!el)return;
+ const initial=getInitialKm(imei);
+ if(initial===null){el.textContent='-';return;}
+ el.textContent=fmtKm(initial);
+ const total=await loadVehicleCumulativeKm(imei);
+ if(total===null)return;
+ const current=document.getElementById('currentVehicleOdometer');
+ if(current) current.textContent=fmtKm(total);
 }
 
 
