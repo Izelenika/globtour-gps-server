@@ -42,6 +42,8 @@ header{height:64px;background:var(--yellow);display:flex;align-items:center;just
   padding:5px 8px;
   white-space:nowrap;
 }
+.vehicle-map-label-selected{z-index:9999 !important;transform:translateY(-5px) scale(1.04);}
+
 .vehicle-map-label:before{display:none}
 .vehicle-map-label.status-moving{background:#16834b}
 .vehicle-map-label.status-parked{background:#d69e00}
@@ -583,6 +585,7 @@ function renderList(data){
          // Klik na autobus na karti odmah otvara detalje tog vozila.
          markers[d.imei].on('click',e=>{
            L.DomEvent.stopPropagation(e);
+           focusMapMarker(d.imei);
            const vehicle=dataById[d.imei] || d;
            showDetails(vehicle);
          });
@@ -607,6 +610,7 @@ function renderList(data){
          tooltip.off('click');
          tooltip.on('click',e=>{
            L.DomEvent.stopPropagation(e);
+           focusMapMarker(d.imei);
            const vehicle=dataById[d.imei] || d;
            showDetails(vehicle);
          });
@@ -619,6 +623,25 @@ function renderList(data){
    }
  });
 }
+let selectedMapImei=null;
+function focusMapMarker(imei){
+  selectedMapImei=imei;
+  Object.entries(markers).forEach(([id,m])=>{
+    if(!m)return;
+    m.setZIndexOffset(id===imei?5000:500);
+    const t=m.getTooltip();
+    if(t){
+      if(id===imei){
+        t.getElement?.()?.classList.add('vehicle-map-label-selected');
+        t.bringToFront?.();
+      }else{
+        t.getElement?.()?.classList.remove('vehicle-map-label-selected');
+      }
+    }
+  });
+  spreadNearbyMarkers();
+}
+
 function spreadNearbyMarkers(){
   if(!map || historyViewing) return;
   const items=Object.entries(markers).map(([imei,m])=>({imei,m})).filter(x=>x.m && x.m._actualLatLng);
