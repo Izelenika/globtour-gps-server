@@ -238,6 +238,7 @@ body{overflow:hidden}
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
 const map=L.map('map',{preferCanvas:true,zoomControl:false}).setView([43.35,17.81],8);
+map.on('zoomend',()=>spreadNearbyMarkers());
 L.control.zoom({position:'topleft'}).addTo(map);
 
 // Podloga karte: standardna karta ili satelitski prikaz.
@@ -577,6 +578,7 @@ function renderList(data){
        // Samo se ikona/oznaka oboji crveno i pokazuje OFFLINE.
        if(!markers[d.imei]){
          markers[d.imei]=L.marker([d.latitude,d.longitude],{icon:makeIcon(on,d.angle,mapStatus.key),zIndexOffset:500}).addTo(map);
+          markers[d.imei]._actualLatLng=L.latLng(d.latitude,d.longitude);
 
          // Klik na autobus na karti odmah otvara detalje tog vozila.
          markers[d.imei].on('click',e=>{
@@ -585,7 +587,8 @@ function renderList(data){
            showDetails(vehicle);
          });
        }else{
-         markers[d.imei].setLatLng([d.latitude,d.longitude]).setIcon(makeIcon(on,d.angle,mapStatus.key));
+         markers[d.imei]._actualLatLng=L.latLng(d.latitude,d.longitude);
+          markers[d.imei].setLatLng(markers[d.imei]._actualLatLng).setIcon(makeIcon(on,d.angle,mapStatus.key));
        }
        const labelClass = mapStatus.key==='moving' ? 'status-moving' : (mapStatus.key==='offline' ? 'status-offline' : 'status-parked');
        const regLabel = esc(label(d));
@@ -616,6 +619,45 @@ function renderList(data){
    }
  });
 }
+function spreadNearbyMarkers(){
+  if(!map || historyViewing) return;
+  const items=Object.entries(markers).map(([imei,m])=>({imei,m})).filter(x=>x.m && x.m._actualLatLng);
+  if(items.length<2) return;
+  const points=items.map(x=>({...x,p:map.latLngToLayerPoint(x.m._actualLatLng)}));
+  const threshold=55, visited=new Set(), groups=[];
+  for(let i=0;i<points.length;i++){
+    if(visited.has(i)) continue;
+    const group=[i]; visited.add(i);
+    for(let changed=true;changed;){
+      changed=false;
+      for(let j=0;j<points.length;j++){
+        if(visited.has(j)) continue;
+        if(group.some(k=>points[k].p.distanceTo(points[j].p)<=threshold)){
+          visited.add(j); group.push(j); changed=true;
+        }
+      }
+    }
+    if(group.length>1) groups.push(group);
+  }
+  const offsetsFor=n=>{
+    if(n===2) return [[-24,0],[24,0]];
+    if(n===3) return [[0,-26],[-24,18],[24,18]];
+    if(n===4) return [[-25,0],[25,0],[0,-25],[0,25]];
+    const radius=30;
+    return Array.from({length:n},(_,i)=>{const a=(Math.PI*2*i/n)-Math.PI/2;return [Math.cos(a)*radius,Math.sin(a)*radius];});
+  };
+  const grouped=new Set();
+  groups.forEach(group=>{
+    const offsets=offsetsFor(group.length);
+    group.forEach((idx,pos)=>{
+      const item=points[idx], o=offsets[pos];
+      grouped.add(item.imei);
+      item.m.setLatLng(map.layerPointToLatLng(item.p.add(L.point(o[0],o[1]))));
+    });
+  });
+  points.forEach(item=>{if(!grouped.has(item.imei)) item.m.setLatLng(item.m._actualLatLng);});
+}
+
 async function load(){try{const r=await fetch('/api/devices',{cache:'no-store'});if(r.status===401){location.href='/login';return;}const data=await r.json();lastData=data;renderList(data);}catch(e){$('updated').textContent='Greška veze';}}
 async function loadCurrentUser(){try{const r=await fetch('/api/me',{cache:'no-store'});if(r.status===401){location.href='/login';return;}const d=await r.json();const el=$('currentUser');if(el)el.textContent='👤 '+d.username+(d.role==='admin'?' · ADMIN':'');if(d.role==='admin')$('usersBtn').style.display='inline-block';}catch(e){}}
 async function loadUsers(){const box=$('usersList');if(!box)return;box.innerHTML='<div style="color:#66727e;font-size:12px">Učitavanje...</div>';try{const r=await fetch('/api/users',{cache:'no-store'});if(!r.ok){box.innerHTML='<div style="color:#c73535">Nema ovlasti za upravljanje korisnicima.</div>';return;}const users=await r.json();box.innerHTML=users.map(u=>`<div style="display:grid;grid-template-columns:1.1fr 1.4fr .8fr .6fr auto;gap:8px;align-items:center;padding:9px 0;border-top:1px solid #eef1f3;font-size:12px"><b>${esc(u.username)}</b><span>${esc(u.full_name||'')}</span><span>${u.role==='admin'?'ADMIN':'KORISNIK'}</span><span>${u.active?'AKTIVAN':'NEAKTIVAN'}</span><button type="button" data-uid="${u.id}" data-active="${u.active?0:1}" style="border:1px solid #d6dce2;background:#fff;border-radius:7px;padding:5px 8px;cursor:pointer">${u.active?'Deaktiviraj':'Aktiviraj'}</button></div>`).join('');box.querySelectorAll('[data-uid]').forEach(b=>b.onclick=async()=>{const r=await fetch('/api/users/'+b.dataset.uid,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({active:b.dataset.active==='1'})});if(r.ok)loadUsers();});}catch(e){box.innerHTML='<div style="color:#c73535">Greška pri učitavanju korisnika.</div>';}}
