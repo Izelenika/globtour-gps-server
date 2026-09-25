@@ -541,7 +541,10 @@ function renderList(data){
    const timeDiff=lastSeenMs(b)-lastSeenMs(a);
    return timeDiff || label(a).localeCompare(label(b),'hr',{sensitivity:'base',numeric:true});
  });
- const box=$('devices'); if(!sorted.length){box.innerHTML='<div class="empty">Nema vozila za prikaz.</div>';return;} box.innerHTML='';
+  const box=$('devices');
+  // Osvježavanje podataka ne smije vratiti scrollbar popisa vozila na vrh.
+  const savedScrollTop=box ? box.scrollTop : 0;
+  if(!sorted.length){box.innerHTML='<div class="empty">Nema vozila za prikaz.</div>';return;} box.innerHTML='';
  sorted.forEach(d=>{
    dataById[d.imei]=d;
    const on=isOnline(d);
@@ -585,6 +588,8 @@ function renderList(data){
          className:'vehicle-map-label '+labelClass,
          opacity:1
        });
+  // Vrati isti položaj nakon što je lista ponovno iscrtana.
+  if(box) requestAnimationFrame(()=>{box.scrollTop=savedScrollTop;});
        markers[d.imei].bindPopup(`<b>${regLabel}</b><br>${esc(d.make_model||'')}<br>${on?'ONLINE':'OFFLINE'}${!on?' — zadnja poznata pozicija':''}<br>Brzina: ${d.speed_kmh??'-'} km/h<br>Vrijeme: ${fmtTime(d.ts_utc)}`);
      }
    }
