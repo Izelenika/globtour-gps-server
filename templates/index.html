@@ -174,7 +174,7 @@ body{overflow:hidden}
       <div class="stat"><div class="n" id="moving">0</div><div class="l">U VOŽNJI</div></div>
     </div>
     <div class="search">
-  <input id="search" placeholder="Pretraži registraciju, marku ili model...">
+  <input id="search" name="gpsVehicleSearch" type="search" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Pretraži registraciju, marku ili model...">
   <div class="sort-row">
     <span>Sortiraj:</span>
     <select id="sortVehicles">
@@ -682,7 +682,11 @@ function spreadNearbyMarkers(){
 }
 
 async function load(){try{const r=await fetch('/api/devices',{cache:'no-store'});if(r.status===401){location.href='/login';return;}const data=await r.json();lastData=data;renderList(data);}catch(e){$('updated').textContent='Greška veze';}}
-async function loadCurrentUser(){try{const r=await fetch('/api/me',{cache:'no-store'});if(r.status===401){location.href='/login';return;}const d=await r.json();const el=$('currentUser');if(el)el.textContent='👤 '+d.username+(d.role==='admin'?' · ADMIN':'');if(d.role==='admin')$('usersBtn').style.display='inline-block';}catch(e){}}
+async function loadCurrentUser(){try{const r=await fetch('/api/me',{cache:'no-store'});if(r.status===401){location.href='/login';return;}const d=await r.json();const el=$('currentUser');if(el)el.textContent='👤 '+d.username+(d.role==='admin'?' · ADMIN':'');if(d.role==='admin')$('usersBtn').style.display='inline-block';
+  // Spriječi Chrome autofill da korisničko ime (npr. admin) ubaci u pretragu vozila.
+  const search=$('search');
+  if(search && search.value.trim().toLowerCase()===String(d.username||'').trim().toLowerCase()){search.value='';}
+  }catch(e){}}
 async function loadUsers(){const box=$('usersList');if(!box)return;box.innerHTML='<div style="color:#66727e;font-size:12px">Učitavanje...</div>';try{const r=await fetch('/api/users',{cache:'no-store'});if(!r.ok){box.innerHTML='<div style="color:#c73535">Nema ovlasti za upravljanje korisnicima.</div>';return;}const users=await r.json();box.innerHTML=users.map(u=>`<div style="display:grid;grid-template-columns:1.1fr 1.4fr .8fr .6fr auto;gap:8px;align-items:center;padding:9px 0;border-top:1px solid #eef1f3;font-size:12px"><b>${esc(u.username)}</b><span>${esc(u.full_name||'')}</span><span>${u.role==='admin'?'ADMIN':'KORISNIK'}</span><span>${u.active?'AKTIVAN':'NEAKTIVAN'}</span><button type="button" data-uid="${u.id}" data-active="${u.active?0:1}" style="border:1px solid #d6dce2;background:#fff;border-radius:7px;padding:5px 8px;cursor:pointer">${u.active?'Deaktiviraj':'Aktiviraj'}</button></div>`).join('');box.querySelectorAll('[data-uid]').forEach(b=>b.onclick=async()=>{const r=await fetch('/api/users/'+b.dataset.uid,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({active:b.dataset.active==='1'})});if(r.ok)loadUsers();});}catch(e){box.innerHTML='<div style="color:#c73535">Greška pri učitavanju korisnika.</div>';}}
 async function openUsers(){const m=$('usersModal');if(!m)return;m.style.display='flex';$('usersMsg').textContent='';loadUsers();}
 document.addEventListener('DOMContentLoaded',()=>{
