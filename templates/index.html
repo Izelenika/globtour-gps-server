@@ -174,7 +174,7 @@ body{overflow:hidden}
       <div class="stat"><div class="n" id="moving">0</div><div class="l">U VOŽNJI</div></div>
     </div>
     <div class="search">
-  <input id="search" name="gpsVehicleSearch" type="search" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Pretraži registraciju, marku ili model...">
+  <input id="search" name="vehicleFilter" type="search" autocomplete="new-password" data-lpignore="true" data-1p-ignore="true" autocapitalize="off" spellcheck="false" placeholder="Pretraži registraciju, marku ili model...">
   <div class="sort-row">
     <span>Sortiraj:</span>
     <select id="sortVehicles">
@@ -274,6 +274,9 @@ let historyDayPoints=[];
 let historyTrips=[];
 let historySelectedTrip=-1;
 const $=id=>document.getElementById(id);
+// Spriječi preglednik/password manager da korisničko ime (npr. admin) upisuje u pretragu vozila.
+function clearSearchAutofill(){ const el=$('search'); if(el && (el.value||'').trim().toLowerCase()==='admin') el.value=''; }
+window.addEventListener('load',()=>{ clearSearchAutofill(); setTimeout(clearSearchAutofill,100); setTimeout(clearSearchAutofill,500); });
 function esc(v){return String(v??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));}
 function fmtTime(v){if(!v)return 'Nema podatka';return new Date(v).toLocaleString('hr-HR',{hour12:false});}
 function parseSeenMs(v){
