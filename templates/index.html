@@ -595,7 +595,7 @@ function renderList(data){
   <div class="vsub">${esc(subtitle||'Podaci vozila nisu uneseni')}</div>
   <div class="vmeta">Zadnje javljanje: <b>${esc(lastSeen ? fmtTime(lastSeen) : 'Nema podatka')}</b></div>
   <div class="vgrid"><div class="metric"><b>${d.speed_kmh??'-'} km/h</b><span>BRZINA</span></div><div class="metric"><b>${d.angle??'-'}°</b><span>SMJER</span></div><div class="metric"><b>${d.satellites??'-'}</b><span>SATELITI</span></div></div>`;
-   el.onclick=()=>{showDetails(d);if(d.latitude!=null&&d.longitude!=null){map.setView([d.latitude,d.longitude],15);markers[d.imei]?.openPopup();}}; box.appendChild(el);
+   el.onclick=()=>{openVehicleAndDrawTodayRoute(d);}; box.appendChild(el);
    if(d.latitude!=null&&d.longitude!=null){
      // Status mora biti izračunat PRIJE izrade ikone. Inače bi JS greška
      // prekinula crtanje svih markera na karti.
@@ -618,7 +618,7 @@ function renderList(data){
            L.DomEvent.stopPropagation(e);
            focusMapMarker(d.imei);
            const vehicle=dataById[d.imei] || d;
-           showDetails(vehicle);
+           openVehicleAndDrawTodayRoute(vehicle);
          });
        }else{
          markers[d.imei]._actualLatLng=L.latLng(d.latitude,d.longitude);
@@ -1011,7 +1011,12 @@ function stopHistoryReplay(){if(historyReplayTimer){clearInterval(historyReplayT
 function startHistoryReplay(){
  if(!historyPoints.length)return;
  stopHistoryReplay();
- if(historyReplayMinute>=1440 || historyStartMs+historyReplayMinute*60000>=historyEndMs)updateHistoryReplay(0);
+ // Svaki klik na Replay kreće od početka i progresivno crta trasu do kraja.
+ historyReplayMinute=0;
+ if(historyPlayedLine)historyPlayedLine.setLatLngs([]);
+ if(historyPlayedHitLine)historyPlayedHitLine.setLatLngs([]);
+ if(historyReplayMarker){historyReplayMarker.remove();historyReplayMarker=null;}
+ updateHistoryReplay(0,true);
  historyReplayTimer=setInterval(()=>{
    const next=historyReplayMinute+1;
    if(next>=1440 || historyStartMs+next*60000>historyEndMs){updateHistoryReplay(Math.min(1440,Math.ceil((historyEndMs-historyStartMs)/60000)));stopHistoryReplay();return;}
@@ -1225,7 +1230,7 @@ function analyzeDrivingHistory(points){
    longestStop:longestStopMs/60000
  };
 }
-async function showHistory(){
+async function showHistory(autoLoadToday=false, forceToday=false){
  // Zaključaj vozilo za ovu sesiju povijesti. Ne oslanjamo se više na globalni
  // 'selected', jer se on može promijeniti prilikom osvježavanja/klikanja po karti.
  const historyImei = selected || (lastData.length===1 ? lastData[0].imei : null);
@@ -1236,7 +1241,9 @@ async function showHistory(){
  selected=historyImei;
  document.querySelectorAll('.vehicle').forEach(x=>x.classList.toggle('active',x.dataset.id===historyImei));
  $('historyTitle').textContent='Povijest trase – '+label(d);
- const today=localDateInput(); if(!$('historyFrom').value)$('historyFrom').value=today; if(!$('historyTo').value)$('historyTo').value=today;
+ const today=localDateInput();
+ if(forceToday){ $('historyFrom').value=today; $('historyTo').value=today; }
+ else { if(!$('historyFrom').value)$('historyFrom').value=today; if(!$('historyTo').value)$('historyTo').value=today; }
  $('detail').classList.remove('show');
  historyViewing=true;
  // Dok je povijest otvorena, ukloni SVE trenutne markere. Na karti ostaje samo
@@ -1244,7 +1251,13 @@ async function showHistory(){
  Object.keys(markers).forEach(id=>{if(markers[id]) markers[id].remove(); delete markers[id];});
  $('historyModal').classList.add('show');$('historyBackdrop').classList.add('show');
  startHistoryLiveTotal();
- setTimeout(()=>{map.invalidateSize({animate:false});},30);
+ setTimeout(()=>{map.invalidateSize({animate:false}); if(autoLoadToday) loadHistory();},30);
+}
+function openVehicleAndDrawTodayRoute(d){
+ if(!d || !d.imei)return;
+ selected=d.imei;
+ focusMapMarker(d.imei);
+ showHistory(true,true);
 }
 function closeHistory(){
  const restoreImei=historyVehicleImei || selected;
@@ -1421,9 +1434,16 @@ async function loadHistory(){
   $('historySlider').value=0;
 
   map.invalidateSize({animate:false});
-  const firstPoint=historyPoints[0];
-  map.setView([firstPoint.latitude,firstPoint.longitude],14,{animate:false});
-  updateHistoryReplay(0);
+  // Nakon odabira perioda prikaži CIJELU trasu, ali nemoj još crtati progresnu/replay trasu.
+  // Replay će tek nakon klika na Replay crtati putanju od početka prema kraju.
+  if(rawLatLngs.length>=2){
+    map.fitBounds(rawLatLngs,{padding:[35,35],maxZoom:14,animate:false});
+  }else{
+    const firstPoint=historyPoints[0];
+    map.setView([firstPoint.latitude,firstPoint.longitude],14,{animate:false});
+  }
+  $('historyReplayTime').textContent=historyLocalTime(historyStartMs);
+  $('historyReplayInfo').textContent='Cijela trasa je prikazana. Kliknite Replay za crtanje od početka do kraja.';
   $('historyMsg').textContent=`Trasa učitana: ${historyPoints.length} GPS točaka. Učitavanje cestovne trase...`;
 
   // Routing je dodatna funkcija. Ako OSRM ne odgovori, ostaje GPS trasa.
@@ -1438,7 +1458,10 @@ async function loadHistory(){
       const add=q=>{const prev=full[full.length-1];if(!prev||prev[0]!==q[0]||prev[1]!==q[1])full.push(q);};
       for(const seg of segments) for(const q of seg) add(q);
       if(historyFullLine) historyFullLine.setLatLngs(full);
-      updateHistoryReplay(historyReplayMinute);
+      // Ne pokreći progresivnu trasu kada završi cestovno usklađivanje.
+      // Cijela ruta ostaje vidljiva, a žuta progresivna ruta kreće tek na Replay.
+      $('historyReplayTime').textContent=historyLocalTime(historyStartMs);
+      $('historyReplayInfo').textContent='Cijela trasa je prikazana. Kliknite Replay za crtanje od početka do kraja.';
       $('historyMsg').textContent=`Trasa učitana: ${historyPoints.length} GPS točaka. Ruta prati cestu između GPS javljanja.`;
     }catch(e){
       // GPS trasa ostaje aktivna ako cestovna obrada zakaže.
@@ -1472,7 +1495,7 @@ function nearestHistoryIndex(targetMs){
  while(lo<=hi){const mid=(lo+hi)>>1;const t=historyPointTime(historyPoints[mid]);if(t===targetMs)return mid;if(t<targetMs)lo=mid+1;else hi=mid-1;}
  return Math.max(0,lo-1);
 }
-function updateHistoryReplay(minute){
+function updateHistoryReplay(minute,drawRoute=true){
  if(!historyPoints.length)return;
  historyReplayMinute=Math.max(0,Math.min(1440,Number(minute)||0));
  $('historySlider').value=historyReplayMinute;
@@ -1482,9 +1505,12 @@ function updateHistoryReplay(minute){
  const idx=nearestHistoryIndex(target); if(idx<0)return;
  const p=historyPoints[idx];
 
- const latlngs=roadLatLngsUntilIndex(idx);
- if(!historyPlayedLine)historyPlayedLine=L.polyline(latlngs,{weight:5,opacity:.95,color:'#e0b900'}).addTo(map);
- else historyPlayedLine.setLatLngs(latlngs);
+ // Progresivnu trasu crtamo samo kada je drawRoute=true (Replay).
+ if(drawRoute){
+   const latlngs=roadLatLngsUntilIndex(idx);
+   if(!historyPlayedLine)historyPlayedLine=L.polyline(latlngs,{weight:5,opacity:.95,color:'#e0b900'}).addTo(map);
+   else historyPlayedLine.setLatLngs(latlngs);
+ }
 
  if(!historyReplayMarker){
    historyReplayMarker=L.marker([p.latitude,p.longitude],{icon:makeIcon(true,p.angle, Number(p.speed_kmh||0)>1 ? 'moving' : 'parked'),zIndexOffset:1000}).addTo(map);
@@ -1594,7 +1620,7 @@ function analyzeDrivingHistory(points){
 $('search').addEventListener('input',()=>renderList(lastData));
 $('sortVehicles').addEventListener('change',()=>renderList(lastData));
 $('fitBtn').onclick=()=>{const pts=Object.values(markers).map(m=>m.getLatLng());if(pts.length)map.fitBounds(L.latLngBounds(pts),{padding:[40,40]});};
-$('historyShow').onclick=loadHistory; $('historyClose').onclick=closeHistory; $('historyBackdrop').onclick=closeHistory; $('historyPlay').onclick=startHistoryReplay; $('historyPause').onclick=stopHistoryReplay; $('historySlider').oninput=e=>updateHistoryReplay(e.target.value); document.querySelectorAll('[data-speed]').forEach(b=>b.onclick=()=>{historySpeed=Number(b.dataset.speed)||1;document.querySelectorAll('[data-speed]').forEach(x=>x.classList.remove('active'));b.classList.add('active');if(historyReplayTimer)startHistoryReplay();});
+$('historyShow').onclick=loadHistory; $('historyClose').onclick=closeHistory; $('historyBackdrop').onclick=closeHistory; $('historyPlay').onclick=startHistoryReplay; $('historyPause').onclick=stopHistoryReplay; $('historySlider').oninput=e=>updateHistoryReplay(e.target.value,false); document.querySelectorAll('[data-speed]').forEach(b=>b.onclick=()=>{historySpeed=Number(b.dataset.speed)||1;document.querySelectorAll('[data-speed]').forEach(x=>x.classList.remove('active'));b.classList.add('active');if(historyReplayTimer)startHistoryReplay();});
 $('closeDetail').onclick=()=>{clearHistoryStops();$('detail').classList.remove('show');selected=null;document.querySelectorAll('.vehicle').forEach(x=>x.classList.remove('active'));};
 
 // Rezervni klik na kartu: ako klikneš blizu žute povijesne trase, pronađi najbližu
