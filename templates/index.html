@@ -1146,8 +1146,7 @@ function drawSelectedTrip(){
 
   const rawLatLngs=historyPoints.map(p=>[Number(p.latitude),Number(p.longitude)]);
   historyFullLine=L.polyline(rawLatLngs,{weight:4,opacity:.28,color:'#6b7280',className:'history-full-route'}).addTo(map);
-  historyPlayedLine=L.polyline([],{weight:5,opacity:.95,color:'#1479e9',interactive:true}).addTo(map);
-  historyPlayedLine.setStyle({color:'#1479e9',opacity:0.95,weight:5});
+  historyPlayedLine=L.polyline([],{weight:5,opacity:.95,color:'#1479e9',interactive:true,className:'history-played-route'}).addTo(map);
   bindHistoryPlayedLineClick();
 
   $('historySlider').disabled=false;
@@ -1426,8 +1425,7 @@ async function loadHistory(){
   // Cestovno usklađivanje se radi u pozadini i nikada više ne smije blokirati Replay/slider.
   const rawLatLngs=historyPoints.map(p=>[p.latitude,p.longitude]);
   historyFullLine=L.polyline(rawLatLngs,{weight:4,opacity:.28,color:'#6b7280',className:'history-full-route'}).addTo(map);
-  historyPlayedLine=L.polyline([],{weight:5,opacity:.95,color:'#1479e9',interactive:true}).addTo(map);
-  historyPlayedLine.setStyle({color:'#1479e9',opacity:0.95,weight:5});
+  historyPlayedLine=L.polyline([],{weight:5,opacity:.95,color:'#1479e9',interactive:true,className:'history-played-route'}).addTo(map);
   bindHistoryPlayedLineClick();
 
   $('historySlider').disabled=false;
@@ -1511,11 +1509,17 @@ function updateHistoryReplay(minute,drawRoute=true){
  if(drawRoute){
    const latlngs=roadLatLngsUntilIndex(idx);
    if(!historyPlayedLine){
-    historyPlayedLine=L.polyline(latlngs,{weight:5,opacity:.95,color:'#1479e9'}).addTo(map);
+     historyPlayedLine=L.polyline(latlngs,{weight:5,opacity:.95,color:'#1479e9',className:'history-played-route'}).addTo(map);
    }else{
-    historyPlayedLine.setLatLngs(latlngs);
-    // Ponovno postavi stil pri svakom pomaku klizača i tijekom Replay reprodukcije.
-    historyPlayedLine.setStyle({color:'#1479e9',opacity:0.95,weight:5});
+     historyPlayedLine.setLatLngs(latlngs);
+     historyPlayedLine.setStyle({color:'#1479e9',opacity:0.95,weight:5});
+   }
+   // Forsiraj vidljivu SVG boju ako neki CSS stil prepisuje Leaflet stil.
+   const playedPath=historyPlayedLine.getElement && historyPlayedLine.getElement();
+   if(playedPath){
+     playedPath.style.setProperty('stroke','#1479e9','important');
+     playedPath.style.setProperty('stroke-opacity','0.95','important');
+     playedPath.style.setProperty('stroke-width','5px','important');
    }
  }
 
