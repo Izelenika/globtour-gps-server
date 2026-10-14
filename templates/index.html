@@ -954,7 +954,7 @@ function updateHistoryReplay(minute){
      weight:18, opacity:0, color:'#000', interactive:true
    }).addTo(map);
    historyPlayedLine=L.polyline(latlngs,{
-     weight:5, opacity:.95, color:'#e0b900', interactive:true
+     weight:5, opacity:.95, color:'#1479e9', interactive:true
    }).addTo(map);
    bindHistoryPlayedLineClick();
  }else{
@@ -1146,7 +1146,7 @@ function drawSelectedTrip(){
 
   const rawLatLngs=historyPoints.map(p=>[Number(p.latitude),Number(p.longitude)]);
   historyFullLine=L.polyline(rawLatLngs,{weight:4,opacity:.28,color:'#6b7280',className:'history-full-route'}).addTo(map);
-  historyPlayedLine=L.polyline([],{weight:5,opacity:.95,color:'#e0b900',interactive:true}).addTo(map);
+  historyPlayedLine=L.polyline([],{weight:5,opacity:.95,color:'#1479e9',interactive:true}).addTo(map);
   bindHistoryPlayedLineClick();
 
   $('historySlider').disabled=false;
@@ -1425,7 +1425,7 @@ async function loadHistory(){
   // Cestovno usklađivanje se radi u pozadini i nikada više ne smije blokirati Replay/slider.
   const rawLatLngs=historyPoints.map(p=>[p.latitude,p.longitude]);
   historyFullLine=L.polyline(rawLatLngs,{weight:4,opacity:.28,color:'#6b7280',className:'history-full-route'}).addTo(map);
-  historyPlayedLine=L.polyline([],{weight:5,opacity:.95,color:'#e0b900',interactive:true}).addTo(map);
+  historyPlayedLine=L.polyline([],{weight:5,opacity:.95,color:'#1479e9',interactive:true}).addTo(map);
   bindHistoryPlayedLineClick();
 
   $('historySlider').disabled=false;
@@ -1508,7 +1508,7 @@ function updateHistoryReplay(minute,drawRoute=true){
  // Progresivnu trasu crtamo samo kada je drawRoute=true (Replay).
  if(drawRoute){
    const latlngs=roadLatLngsUntilIndex(idx);
-   if(!historyPlayedLine)historyPlayedLine=L.polyline(latlngs,{weight:5,opacity:.95,color:'#e0b900'}).addTo(map);
+   if(!historyPlayedLine)historyPlayedLine=L.polyline(latlngs,{weight:5,opacity:.95,color:'#1479e9'}).addTo(map);
    else historyPlayedLine.setLatLngs(latlngs);
  }
 
