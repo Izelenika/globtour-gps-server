@@ -948,7 +948,7 @@ function updateHistoryReplay(minute){
 
  const latlngs=historyPoints.slice(0,idx+1).map(x=>[x.latitude,x.longitude]);
  if(!historyPlayedLine){
-   // Vidljiva žuta trasa + šira nevidljiva "klik zona" kako bi klik bio
+   // Vidljiva plava trasa + šira nevidljiva "klik zona" kako bi klik bio
    // pouzdan čak i kada je linija tanka ili se klikne blizu nje.
    historyPlayedHitLine=L.polyline(latlngs,{
      weight:18, opacity:0, color:'#000', interactive:true
@@ -1147,6 +1147,7 @@ function drawSelectedTrip(){
   const rawLatLngs=historyPoints.map(p=>[Number(p.latitude),Number(p.longitude)]);
   historyFullLine=L.polyline(rawLatLngs,{weight:4,opacity:.28,color:'#6b7280',className:'history-full-route'}).addTo(map);
   historyPlayedLine=L.polyline([],{weight:5,opacity:.95,color:'#1479e9',interactive:true}).addTo(map);
+  historyPlayedLine.setStyle({color:'#1479e9',opacity:0.95,weight:5});
   bindHistoryPlayedLineClick();
 
   $('historySlider').disabled=false;
@@ -1426,6 +1427,7 @@ async function loadHistory(){
   const rawLatLngs=historyPoints.map(p=>[p.latitude,p.longitude]);
   historyFullLine=L.polyline(rawLatLngs,{weight:4,opacity:.28,color:'#6b7280',className:'history-full-route'}).addTo(map);
   historyPlayedLine=L.polyline([],{weight:5,opacity:.95,color:'#1479e9',interactive:true}).addTo(map);
+  historyPlayedLine.setStyle({color:'#1479e9',opacity:0.95,weight:5});
   bindHistoryPlayedLineClick();
 
   $('historySlider').disabled=false;
@@ -1459,7 +1461,7 @@ async function loadHistory(){
       for(const seg of segments) for(const q of seg) add(q);
       if(historyFullLine) historyFullLine.setLatLngs(full);
       // Ne pokreći progresivnu trasu kada završi cestovno usklađivanje.
-      // Cijela ruta ostaje vidljiva, a žuta progresivna ruta kreće tek na Replay.
+      // Cijela ruta ostaje vidljiva, a plava progresivna ruta kreće tek na Replay.
       $('historyReplayTime').textContent=historyLocalTime(historyStartMs);
       $('historyReplayInfo').textContent='Cijela trasa je prikazana. Kliknite Replay za crtanje od početka do kraja.';
       $('historyMsg').textContent=`Trasa učitana: ${historyPoints.length} GPS točaka. Ruta prati cestu između GPS javljanja.`;
@@ -1508,8 +1510,13 @@ function updateHistoryReplay(minute,drawRoute=true){
  // Progresivnu trasu crtamo samo kada je drawRoute=true (Replay).
  if(drawRoute){
    const latlngs=roadLatLngsUntilIndex(idx);
-   if(!historyPlayedLine)historyPlayedLine=L.polyline(latlngs,{weight:5,opacity:.95,color:'#1479e9'}).addTo(map);
-   else historyPlayedLine.setLatLngs(latlngs);
+   if(!historyPlayedLine){
+    historyPlayedLine=L.polyline(latlngs,{weight:5,opacity:.95,color:'#1479e9'}).addTo(map);
+   }else{
+    historyPlayedLine.setLatLngs(latlngs);
+    // Ponovno postavi stil pri svakom pomaku klizača i tijekom Replay reprodukcije.
+    historyPlayedLine.setStyle({color:'#1479e9',opacity:0.95,weight:5});
+   }
  }
 
  if(!historyReplayMarker){
